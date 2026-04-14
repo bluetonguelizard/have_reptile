@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAVE REPTILE GAME</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/translations.js"></script>
+<script src="js/auth.js"></script>
+</head>
+<body>
+<div class="lang-toggle">
+  <button class="pixel-btn small" onclick="toggleGameLang()">EN/KO</button>
+</div>
+
+<div id="game-container">
+  <canvas id="game-canvas"
+    onclick="canvas_click(event)"
+    onmousemove="canvas_mousemove(event)">
+  </canvas>
+
+  <!-- Date display -->
+  <div id="date-display" style="display:none"></div>
+
+  <!-- UI Overlay (shown in room after born) -->
+  <div id="ui-overlay" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
+      <span id="lizard-name-label" style="font-size:9px;color:#e8a020;white-space:nowrap"></span>
+      <span id="age-label" style="font-size:8px;color:#aaa;white-space:nowrap"></span>
+      <div class="stat-bar-wrap">
+        <span class="stat-label" id="lbl-hunger"></span>
+        <div class="stat-bar"><div class="stat-fill hunger" id="bar-hunger" style="width:80%"></div></div>
+      </div>
+      <div class="stat-bar-wrap">
+        <span class="stat-label" id="lbl-happy"></span>
+        <div class="stat-bar"><div class="stat-fill happy" id="bar-happy" style="width:70%"></div></div>
+      </div>
+      <div class="stat-bar-wrap">
+        <span class="stat-label" id="lbl-bond"></span>
+        <div class="stat-bar"><div class="stat-fill bond" id="bar-bond" style="width:10%"></div></div>
+      </div>
+      <div class="stat-bar-wrap">
+        <span class="stat-label" id="lbl-hydration"></span>
+        <div class="stat-bar"><div class="stat-fill hydration" id="bar-hydration" style="width:80%"></div></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="pixel-btn small" id="btn-handle" onclick="doHandle()"></button>
+      <button class="pixel-btn small blue" id="btn-feed" onclick="doFeed()"></button>
+      <button class="pixel-btn small" id="btn-water" onclick="doWater()" style="background:#4abfe8;color:#fff"></button>
+      <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
+      <button class="pixel-btn small red" onclick="doLogout()">OUT</button>
+    </div>
+  </div>
+
+  <!-- Message box -->
+  <div id="msg-box"></div>
+
+  <!-- Name modal -->
+  <div id="name-modal" style="display:none">
+    <div class="modal-panel">
+      <h2 id="modal-title"></h2>
+      <p id="modal-prompt" style="white-space:pre-line"></p>
+      <div class="form-group">
+        <input class="pixel-input" type="text" id="lizard-name-input" maxlength="16"
+          onkeydown="if(event.key==='Enter')confirmName()">
+      </div>
+      <button class="pixel-btn green" style="width:100%" id="modal-confirm" onclick="confirmName()"></button>
+    </div>
+  </div>
+</div>
+
+<script src="js/game.js"></script>
+<script>
+function toggleGameLang() {
+  setLang(currentLang === 'ko' ? 'en' : 'ko');
+  updateGameLabels();
+}
+
+function updateGameLabels() {
+  document.getElementById('lbl-hunger').textContent = t('hunger');
+  document.getElementById('lbl-happy').textContent = t('happy');
+  document.getElementById('lbl-bond').textContent = t('bond');
+  document.getElementById('btn-handle').textContent = t('handle_btn');
+  document.getElementById('btn-feed').textContent = t('feed_btn');
+  document.getElementById('lbl-hydration').textContent = t('hydration');
+  document.getElementById('btn-status').textContent = t('status_btn');
+  // water button label depends on lizard type (set after gs is loaded)
+  const wKey = (typeof lizardType !== 'undefined' && lizardType === 'bluetongue') ? 'water_btn_bt' : 'water_btn';
+  document.getElementById('btn-water').textContent = t(wKey);
+}
+
+function doLogout() {
+  saveGame();
+  AUTH.logout();
+  window.location.href = 'index.html';
+}
+
+window.addEventListener('load', () => {
+  if (!AUTH.currentUser()) { window.location.href = 'index.html'; return; }
+  updateGameLabels();
+});
+</script>
+</body>
+</html>

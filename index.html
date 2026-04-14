@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAVE REPTILE GAME</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/translations.js"></script>
+<script src="js/auth.js"></script>
+</head>
+<body>
+<div class="lang-toggle">
+  <button class="pixel-btn small" id="lang-btn" onclick="toggleLang()">EN/KO</button>
+</div>
+
+<div class="panel" id="auth-panel">
+  <h1 id="shop-title">HAVE REPTILE GAME</h1>
+  <div class="tab-btns">
+    <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">LOGIN</button>
+    <button class="tab-btn" id="tab-register" onclick="switchTab('register')">REGISTER</button>
+  </div>
+
+  <!-- Login -->
+  <div id="form-login">
+    <div class="form-group">
+      <label id="lbl-login-user">아이디</label>
+      <input class="pixel-input" type="text" id="login-user" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label id="lbl-login-pw">비밀번호</label>
+      <input class="pixel-input" type="password" id="login-pw" autocomplete="current-password">
+    </div>
+    <button class="pixel-btn" style="width:100%;margin-top:8px" onclick="doLogin()" id="btn-login">로그인</button>
+    <p class="error-msg" id="login-err"></p>
+  </div>
+
+  <!-- Register -->
+  <div id="form-register" style="display:none">
+    <div class="form-group">
+      <label id="lbl-reg-user">아이디</label>
+      <input class="pixel-input" type="text" id="reg-user" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label id="lbl-reg-pw">비밀번호</label>
+      <input class="pixel-input" type="password" id="reg-pw" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label id="lbl-reg-cpw">비밀번호 확인</label>
+      <input class="pixel-input" type="password" id="reg-cpw" autocomplete="new-password">
+    </div>
+    <button class="pixel-btn green" style="width:100%;margin-top:8px" onclick="doRegister()" id="btn-register">가입하기</button>
+    <p class="error-msg" id="reg-err"></p>
+    <p class="success-msg" id="reg-ok"></p>
+  </div>
+</div>
+
+<script>
+function toggleLang() {
+  setLang(currentLang === 'ko' ? 'en' : 'ko');
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  document.getElementById('shop-title').innerHTML = t('title').replace('\n','<br>');
+  document.getElementById('tab-login').textContent = t('login');
+  document.getElementById('tab-register').textContent = t('register');
+  document.getElementById('lbl-login-user').textContent = t('username');
+  document.getElementById('lbl-login-pw').textContent = t('password');
+  document.getElementById('btn-login').textContent = t('login_btn');
+  document.getElementById('lbl-reg-user').textContent = t('username');
+  document.getElementById('lbl-reg-pw').textContent = t('password');
+  document.getElementById('lbl-reg-cpw').textContent = t('confirm_pw');
+  document.getElementById('btn-register').textContent = t('register_btn');
+  document.getElementById('login-user').placeholder = '';
+  document.getElementById('reg-user').placeholder = '';
+}
+
+function switchTab(tab) {
+  document.getElementById('form-login').style.display = tab === 'login' ? '' : 'none';
+  document.getElementById('form-register').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('tab-login').className = 'tab-btn' + (tab === 'login' ? ' active' : '');
+  document.getElementById('tab-register').className = 'tab-btn' + (tab === 'register' ? ' active' : '');
+}
+
+function showErr(id, key) {
+  const el = document.getElementById(id);
+  el.textContent = t(key);
+  el.style.display = 'block';
+}
+function hideErr(id) { document.getElementById(id).style.display = 'none'; }
+
+function doLogin() {
+  hideErr('login-err');
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pw').value;
+  if (!u || !p) { showErr('login-err', 'err_fill'); return; }
+  const res = AUTH.login(u, p);
+  if (!res.ok) { showErr('login-err', res.err); return; }
+  window.location.href = 'game.html';
+}
+
+function doRegister() {
+  hideErr('reg-err');
+  document.getElementById('reg-ok').style.display = 'none';
+  const u = document.getElementById('reg-user').value.trim();
+  const p = document.getElementById('reg-pw').value;
+  const c = document.getElementById('reg-cpw').value;
+  if (!u || !p || !c) { showErr('reg-err', 'err_fill'); return; }
+  if (p !== c) { showErr('reg-err', 'err_pw_match'); return; }
+  const res = AUTH.register(u, p);
+  if (!res.ok) { showErr('reg-err', res.err); return; }
+  const ok = document.getElementById('reg-ok');
+  ok.textContent = t('ok_register');
+  ok.style.display = 'block';
+  setTimeout(() => switchTab('login'), 1200);
+}
+
+// Enter key support
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('form-login').style.display !== 'none') doLogin();
+    else doRegister();
+  }
+});
+
+// Auto redirect if logged in
+window.addEventListener('load', () => {
+  updateAuthUI();
+  if (AUTH.currentUser()) window.location.href = 'game.html';
+});
+</script>
+</body>
+</html>

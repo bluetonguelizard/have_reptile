@@ -1,0 +1,173 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; image-rendering: pixelated; }
+
+body {
+  background: #1a1a2e;
+  font-family: 'Press Start 2P', monospace;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pixel-btn {
+  font-family: 'Press Start 2P', monospace;
+  background: #e8a020;
+  color: #1a1a2e;
+  border: 4px solid #1a1a2e;
+  box-shadow: 4px 4px 0 #1a1a2e;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: transform 0.1s;
+}
+.pixel-btn:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 #1a1a2e; }
+.pixel-btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 #1a1a2e; }
+.pixel-btn.blue { background: #4a90d9; color: #fff; }
+.pixel-btn.red { background: #d94a4a; color: #fff; }
+.pixel-btn.green { background: #4ad94a; color: #1a1a2e; }
+.pixel-btn.small { font-size: 8px; padding: 6px 12px; }
+
+.pixel-input {
+  font-family: 'Press Start 2P', monospace;
+  background: #0d0d1a;
+  color: #e0e0e0;
+  border: 4px solid #e8a020;
+  padding: 10px;
+  font-size: 10px;
+  width: 100%;
+  outline: none;
+}
+.pixel-input:focus { border-color: #fff; }
+
+.panel {
+  background: #16213e;
+  border: 4px solid #e8a020;
+  box-shadow: 8px 8px 0 #0a0a1a;
+  padding: 24px;
+  max-width: 480px;
+  width: 90%;
+}
+
+.panel h1 { font-size: 14px; color: #e8a020; margin-bottom: 20px; text-align: center; line-height: 1.6; }
+.panel h2 { font-size: 11px; color: #e8a020; margin-bottom: 16px; text-align: center; }
+
+.lang-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 999;
+}
+
+.tab-btns { display: flex; gap: 0; margin-bottom: 20px; }
+.tab-btn {
+  flex: 1;
+  font-family: 'Press Start 2P', monospace;
+  background: #0d0d1a;
+  color: #888;
+  border: 4px solid #333;
+  padding: 10px 6px;
+  cursor: pointer;
+  font-size: 9px;
+}
+.tab-btn.active { background: #e8a020; color: #1a1a2e; border-color: #e8a020; }
+
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 8px; color: #aaa; margin-bottom: 6px; }
+
+.error-msg { color: #ff6b6b; font-size: 8px; margin-top: 10px; text-align: center; display: none; }
+.success-msg { color: #6bff6b; font-size: 8px; margin-top: 10px; text-align: center; display: none; }
+
+/* GAME CANVAS AREA */
+#game-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: #1a1a2e;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+#date-display {
+  position: fixed;
+  top: 10px;
+  right: 60px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #e8a020;
+  background: #0d0d1a;
+  border: 3px solid #e8a020;
+  padding: 6px 10px;
+  z-index: 100;
+}
+
+#ui-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #0d0d1a;
+  border-top: 4px solid #e8a020;
+  padding: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 100;
+  flex-wrap: wrap;
+}
+
+.stat-bar-wrap { display: flex; align-items: center; gap: 6px; }
+.stat-label { font-size: 7px; color: #aaa; white-space: nowrap; }
+.stat-bar { width: 80px; height: 10px; background: #333; border: 2px solid #555; }
+.stat-fill { height: 100%; transition: width 0.3s; }
+.stat-fill.hunger { background: #e8a020; }
+.stat-fill.happy { background: #e84040; }
+.stat-fill.bond { background: #4a90d9; }
+.stat-fill.hydration { background: #4abfe8; }
+
+#msg-box {
+  white-space: pre-line;
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0d0d1a;
+  border: 4px solid #e8a020;
+  padding: 12px 20px;
+  font-size: 9px;
+  color: #e0e0e0;
+  max-width: 400px;
+  text-align: center;
+  z-index: 200;
+  display: none;
+  line-height: 1.8;
+}
+
+#name-modal, #egg-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.modal-panel {
+  background: #16213e;
+  border: 4px solid #e8a020;
+  box-shadow: 8px 8px 0 #0a0a1a;
+  padding: 28px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+}
+.modal-panel h2 { font-size: 10px; color: #e8a020; margin-bottom: 20px; line-height: 1.8; }
+.modal-panel p { font-size: 8px; color: #aaa; margin-bottom: 16px; line-height: 1.8; }
