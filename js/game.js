@@ -760,8 +760,14 @@ let hoverEgg = -1;
 
 window.addEventListener('load', () => {
   canvas = document.getElementById('game-canvas');
-  canvas.width = Math.min(window.innerWidth, 900);
-  canvas.height = Math.min(window.innerHeight - 70, 600);
+
+  function resizeCanvas() {
+    canvas.width = Math.min(window.innerWidth, 900);
+    canvas.height = Math.min(window.innerHeight - 70, 600);
+    if (ctx) ctx.imageSmoothingEnabled = false;
+  }
+  resizeCanvas();
+
   ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
 
@@ -778,6 +784,24 @@ window.addEventListener('load', () => {
     document.getElementById('date-display').style.display = 'block';
     if (gs.bornAnim) document.getElementById('ui-overlay').style.display = 'flex';
   }
+
+  // Touch support for canvas
+  canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    canvas_click({ clientX: touch.clientX, clientY: touch.clientY });
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    canvas_mousemove({ clientX: touch.clientX, clientY: touch.clientY });
+  }, { passive: false });
+
+  // Resize on orientation change
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+  });
 
   requestAnimationFrame(gameLoop);
 

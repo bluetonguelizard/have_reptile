@@ -171,3 +171,70 @@ canvas {
 }
 .modal-panel h2 { font-size: 10px; color: #e8a020; margin-bottom: 20px; line-height: 1.8; }
 .modal-panel p { font-size: 8px; color: #aaa; margin-bottom: 16px; line-height: 1.8; }
+
+/* ─── MOBILE RESPONSIVE ──────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  /* Larger touch targets for buttons */
+  .pixel-btn { font-size: 9px; padding: 12px 14px; }
+  .pixel-btn.small { font-size: 7px; padding: 10px 8px; min-height: 40px; min-width: 36px; }
+
+  /* Panel fits mobile */
+  .panel { padding: 18px; width: 94%; }
+  .panel h1 { font-size: 11px; }
+
+  /* UI overlay: two rows on small screens */
+  #ui-overlay {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  #ui-overlay > div:first-child {
+    gap: 6px;
+  }
+  #ui-overlay > div:last-child {
+    justify-content: space-between;
+    gap: 4px;
+  }
+  #ui-overlay > div:last-child .pixel-btn.small {
+    flex: 1;
+  }
+
+  /* Smaller stat bars on mobile */
+  .stat-bar { width: 52px; height: 8px; }
+  .stat-label { font-size: 6px; }
+
+  /* Message box above taller UI */
+  #msg-box {
+    bottom: 130px;
+    max-width: 92vw;
+    font-size: 8px;
+    padding: 10px 14px;
+  }
+
+  /* Date display: avoid overlap with lang button */
+  #date-display {
+    font-size: 7px;
+    right: 54px;
+    padding: 4px 7px;
+    top: 8px;
+  }
+
+  /* Modal panel fits mobile */
+  .modal-panel { padding: 20px 16px; }
+  .modal-panel h2 { font-size: 9px; }
+  .modal-panel p { font-size: 7px; }
+
+  /* Pixel input easier to tap */
+  .pixel-input { font-size: 9px; padding: 12px 10px; }
+
+  /* Name/age label wrap */
+  #lizard-name-label { font-size: 8px !important; }
+  #age-label { font-size: 7px !important; }
+}
+
+@media (max-width: 380px) {
+  .pixel-btn.small { font-size: 6px; padding: 9px 5px; }
+  .stat-bar { width: 40px; }
+  #msg-box { font-size: 7px; }
+}
