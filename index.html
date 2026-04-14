@@ -13,6 +13,14 @@
   <button class="pixel-btn small" id="lang-btn" onclick="toggleLang()">EN/KO</button>
 </div>
 
+<!-- Home panel (shown when logged in) -->
+<div class="panel" id="home-panel" style="display:none;text-align:center">
+  <h1 style="font-size:12px;margin-bottom:6px">HAVE REPTILE GAME</h1>
+  <p id="home-welcome-msg" style="font-size:8px;color:#aaa;margin-bottom:24px"></p>
+  <button class="pixel-btn green" style="width:100%;margin-bottom:12px" id="btn-go-game" onclick="window.location.href='game.html'">게임 시작</button>
+  <button class="pixel-btn red" style="width:100%" id="btn-home-logout" onclick="doHomeLogout()">로그아웃</button>
+</div>
+
 <div class="panel" id="auth-panel">
   <h1 id="shop-title">HAVE REPTILE GAME</h1>
   <div class="tab-btns">
@@ -73,6 +81,13 @@ function updateAuthUI() {
   document.getElementById('btn-register').textContent = t('register_btn');
   document.getElementById('login-user').placeholder = '';
   document.getElementById('reg-user').placeholder = '';
+  // Home panel labels
+  const user = AUTH.currentUser();
+  if (user) {
+    document.getElementById('home-welcome-msg').textContent = t('home_welcome') + ' ' + user.username;
+  }
+  document.getElementById('btn-go-game').textContent = t('go_game');
+  document.getElementById('btn-home-logout').textContent = t('logout');
 }
 
 function switchTab(tab) {
@@ -123,10 +138,19 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Auto redirect if logged in
+function doHomeLogout() {
+  AUTH.logout();
+  document.getElementById('home-panel').style.display = 'none';
+  document.getElementById('auth-panel').style.display = '';
+}
+
+// Show home panel if logged in, otherwise show auth panel
 window.addEventListener('load', () => {
   updateAuthUI();
-  if (AUTH.currentUser()) window.location.href = 'game.html';
+  if (AUTH.currentUser()) {
+    document.getElementById('home-panel').style.display = '';
+    document.getElementById('auth-panel').style.display = 'none';
+  }
 });
 </script>
 </body>

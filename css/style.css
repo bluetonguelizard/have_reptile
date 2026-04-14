@@ -1,10 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/galmuri/dist/galmuri.css');
 
 * { box-sizing: border-box; margin: 0; padding: 0; image-rendering: pixelated; }
 
+#watermark {
+  position: fixed;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Press Start 2P', 'Galmuri11', monospace;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  z-index: 9999;
+  white-space: nowrap;
+}
+
 body {
   background: #1a1a2e;
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Press Start 2P', 'Galmuri11', monospace;
   color: #e0e0e0;
   min-height: 100vh;
   display: flex;
@@ -13,7 +27,7 @@ body {
 }
 
 .pixel-btn {
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Press Start 2P', 'Galmuri11', monospace;
   background: #e8a020;
   color: #1a1a2e;
   border: 4px solid #1a1a2e;
@@ -31,7 +45,7 @@ body {
 .pixel-btn.small { font-size: 8px; padding: 6px 12px; }
 
 .pixel-input {
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Press Start 2P', 'Galmuri11', monospace;
   background: #0d0d1a;
   color: #e0e0e0;
   border: 4px solid #e8a020;
@@ -61,10 +75,19 @@ body {
   z-index: 999;
 }
 
+#game-nav {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 999;
+  display: flex;
+  gap: 6px;
+}
+
 .tab-btns { display: flex; gap: 0; margin-bottom: 20px; }
 .tab-btn {
   flex: 1;
-  font-family: 'Press Start 2P', monospace;
+  font-family: 'Press Start 2P', 'Galmuri11', monospace;
   background: #0d0d1a;
   color: #888;
   border: 4px solid #333;
@@ -97,9 +120,9 @@ canvas {
 
 #date-display {
   position: fixed;
-  top: 10px;
-  right: 60px;
-  font-family: 'Press Start 2P', monospace;
+  top: 50px;
+  right: 12px;
+  font-family: 'Press Start 2P', 'Galmuri11', monospace;
   font-size: 9px;
   color: #e8a020;
   background: #0d0d1a;
@@ -212,12 +235,19 @@ canvas {
     padding: 10px 14px;
   }
 
-  /* Date display: avoid overlap with lang button */
+  /* Date display: below lang button */
   #date-display {
     font-size: 7px;
-    right: 54px;
+    right: 8px;
     padding: 4px 7px;
+    top: 48px;
+  }
+
+  /* Game nav buttons on mobile */
+  #game-nav {
     top: 8px;
+    left: 8px;
+    gap: 4px;
   }
 
   /* Modal panel fits mobile */

@@ -13,6 +13,11 @@
   <button class="pixel-btn small" onclick="toggleGameLang()">EN/KO</button>
 </div>
 
+<div id="game-nav">
+  <button class="pixel-btn small" id="btn-nav-home" onclick="doGoHome()">홈</button>
+  <button class="pixel-btn small red" id="btn-nav-logout" onclick="doLogout()">로그아웃</button>
+</div>
+
 <div id="game-container">
   <canvas id="game-canvas"
     onclick="canvas_click(event)"
@@ -49,7 +54,6 @@
       <button class="pixel-btn small blue" id="btn-feed" onclick="doFeed()"></button>
       <button class="pixel-btn small" id="btn-water" onclick="doWater()" style="background:#4abfe8;color:#fff"></button>
       <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
-      <button class="pixel-btn small red" onclick="doLogout()">OUT</button>
     </div>
   </div>
 
@@ -70,6 +74,8 @@
   </div>
 </div>
 
+<div id="watermark">@chocoreptier</div>
+
 <script src="js/game.js"></script>
 <script>
 function toggleGameLang() {
@@ -88,6 +94,13 @@ function updateGameLabels() {
   // water button label depends on lizard type (set after gs is loaded)
   const wKey = (typeof lizardType !== 'undefined' && lizardType === 'bluetongue') ? 'water_btn_bt' : 'water_btn';
   document.getElementById('btn-water').textContent = t(wKey);
+  document.getElementById('btn-nav-home').textContent = t('home_btn');
+  document.getElementById('btn-nav-logout').textContent = t('logout');
+}
+
+function doGoHome() {
+  saveGame();
+  window.location.href = 'index.html';
 }
 
 function doLogout() {

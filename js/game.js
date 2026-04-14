@@ -122,7 +122,7 @@ function px(x, y, w, h, color) {
 }
 
 function drawText(text, x, y, size, color, align='left') {
-  ctx.font = `${size}px 'Press Start 2P', monospace`;
+  ctx.font = `${size}px 'Press Start 2P', Galmuri11, monospace`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.imageSmoothingEnabled = false;
@@ -154,7 +154,7 @@ function drawShop() {
   px(sx-6, sy-6, sw+12, sh+12, '#5c3a10'); // border
   px(sx, sy, sw, sh, '#e8a020');
   // Sign text
-  ctx.font = "bold 22px 'Press Start 2P', monospace";
+  ctx.font = "bold 22px 'Press Start 2P', Galmuri11, monospace";
   ctx.fillStyle = '#1a0a00';
   ctx.textAlign = 'center';
   ctx.fillText('HAVE REPTILE', W/2, sy+32);
@@ -181,7 +181,7 @@ function drawShop() {
   // Shopkeeper (pixel man)
   drawShopkeeper(W/2 - 140, H*0.35);
   // Enter text
-  ctx.font = "11px 'Press Start 2P', monospace";
+  ctx.font = "11px 'Press Start 2P', Galmuri11, monospace";
   ctx.fillStyle = '#e8a020';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#000';
@@ -219,7 +219,7 @@ function drawShopkeeper(x, y) {
   px(bx-2, by-2, 134, 32, C.black);
   px(bx, by, 130, 28, C.white);
   px(bx+12, by+28, 10, 8, C.white);
-  ctx.font = "7px 'Press Start 2P', monospace";
+  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
   ctx.fillStyle = '#1a1a1a';
   ctx.fillText(currentLang === 'ko' ? '알을 고르세요!' : 'Choose an egg!', bx+6, by+18);
 }
@@ -242,21 +242,21 @@ function drawEggScene() {
   drawEgg(egg2x, eggy, 'blue', hoverEgg === 1);
 
   // Labels
-  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.font = "8px 'Press Start 2P', Galmuri11, monospace";
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e8a020'; ctx.fillText(t('egg_orange'), egg1x+40, eggy+105);
   ctx.fillStyle = '#7ab8e8'; ctx.fillText(t('egg_blue'), egg2x+40, eggy+105);
   ctx.textAlign = 'left';
 
   // Note for bluetongue
-  ctx.font = "7px 'Press Start 2P', monospace";
+  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
   ctx.fillStyle = '#aaa';
   ctx.textAlign = 'center';
   ctx.fillText(t('egg_note'), W/2, H - 40);
   ctx.textAlign = 'left';
 
   // Title
-  ctx.font = "11px 'Press Start 2P', monospace";
+  ctx.font = "11px 'Press Start 2P', Galmuri11, monospace";
   ctx.textAlign = 'center';
   ctx.fillStyle = '#000'; ctx.fillText(t('choose_egg'), W/2+1, 36);
   ctx.fillStyle = '#e8d050'; ctx.fillText(t('choose_egg'), W/2, 35);
@@ -398,7 +398,7 @@ function drawCrestieEnclosure(x, y, w, h) {
   ctx.lineWidth = 1;
   for (let i = 0; i < w; i += 8) ctx.strokeRect(x+i, y, 6, 20);
   // Label
-  ctx.font = "7px 'Press Start 2P', monospace";
+  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
   ctx.fillStyle = '#5a4820';
   ctx.fillText('JIF ENCLOSURE', x+10, y+h-8);
   // Substrate (coco fiber - dark brown)
@@ -434,7 +434,7 @@ function drawCrestieHide(x, y, small) {
   ctx.lineTo(55, 55); ctx.lineTo(15, 55);
   ctx.closePath(); ctx.fill();
   // Label
-  ctx.font = "5px 'Press Start 2P'"; ctx.fillStyle = '#e8d0a0';
+  ctx.font = "5px 'Press Start 2P', Galmuri11, monospace"; ctx.fillStyle = '#e8d0a0';
   ctx.fillText('COZY', 22, 30);
   ctx.restore();
 }
@@ -505,7 +505,7 @@ function drawBluetongueEnclosure(x, y, w, h) {
   ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2;
   ctx.strokeRect(x+6, y+6, (w-12)/2-2, h-30);
   ctx.strokeRect(x+(w-12)/2+8, y+6, (w-12)/2-2, h-30);
-  ctx.font = "7px 'Press Start 2P'"; ctx.fillStyle = '#303030';
+  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace"; ctx.fillStyle = '#303030';
   ctx.fillText('3-SIZE FORMAX', x+10, y+h-8);
   // Substrate (newspaper/paper)
   px(x+6, y+h-55, w-12, 49, '#f0e8c0');
@@ -531,7 +531,7 @@ function drawBluetongueHide(x, y) {
   // Opening
   ctx.fillStyle = '#1a1a1a';
   ctx.fillRect(15, 35, 60, 22);
-  ctx.font = "5px 'Press Start 2P'"; ctx.fillStyle = '#ccc';
+  ctx.font = "5px 'Press Start 2P', Galmuri11, monospace"; ctx.fillStyle = '#ccc';
   ctx.fillText('HIDE', 30, 30);
 }
 

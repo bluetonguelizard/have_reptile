@@ -56,6 +56,10 @@ const T = {
     type_bt: "블루텅 스킨크",
     stat_full: "상태 양호",
     stat_warning: "관리가 필요해요!",
+    home_welcome: "어서오세요,",
+    go_game: "게임 시작",
+    logout: "로그아웃",
+    home_btn: "홈",
   },
   en: {
     title: "HAVE REPTILE GAME",
@@ -114,6 +118,10 @@ const T = {
     type_bt: "Blue-tongue Skink",
     stat_full: "All good!",
     stat_warning: "Needs attention!",
+    home_welcome: "Welcome,",
+    go_game: "Play Game",
+    logout: "Logout",
+    home_btn: "Home",
   }
 };
 
