@@ -9,8 +9,12 @@
 <script src="js/auth.js"></script>
 </head>
 <body>
-<div class="lang-toggle">
-  <button class="pixel-btn small" onclick="toggleGameLang()">EN/KO</button>
+<div class="top-right-panel">
+  <div class="lang-toggle">
+    <button class="pixel-btn small" onclick="toggleGameLang()">EN/KO</button>
+  </div>
+  <!-- Date display -->
+  <div id="date-display" style="display:none"></div>
 </div>
 
 <div id="game-nav">
@@ -23,9 +27,6 @@
     onclick="canvas_click(event)"
     onmousemove="canvas_mousemove(event)">
   </canvas>
-
-  <!-- Date display -->
-  <div id="date-display" style="display:none"></div>
 
   <!-- UI Overlay (shown in room after born) -->
   <div id="ui-overlay" style="display:none">
