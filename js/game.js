@@ -283,8 +283,8 @@ function drawEgg(x, y, type, hover) {
 
   ctx.beginPath();
   ctx.moveTo(W/2, 2);
-  ctx.bezierCurveTo(W+10, 5, W+15, 60, W/2, H);
-  ctx.bezierCurveTo(-15, 60, -10, 5, W/2, 2);
+  ctx.bezierCurveTo(W*0.75, 0, W+12, H*0.62, W/2, H);
+  ctx.bezierCurveTo(-12, H*0.62, W*0.25, 0, W/2, 2);
   ctx.fillStyle = color;
   ctx.fill();
   ctx.strokeStyle = color2;
@@ -452,43 +452,92 @@ function drawLeaf(x, y) {
 
 function drawCrestie(x, y, anim) {
   const threatening = anim.threatening;
-  // Crested gecko pixel art
   const s = 3;
-  // Body
+
+  // TAIL — long, prehensile, curves down then tip curls back up
+  ctx.fillStyle = '#8a5018';
+  ctx.fillRect(x-8*s, y+8*s,  s,   s  );  // tip curl end
+  ctx.fillRect(x-7*s, y+7*s,  2*s, 2*s);
+  ctx.fillStyle = '#9a5820';
+  ctx.fillRect(x-6*s, y+6*s,  3*s, 2*s);
+  ctx.fillRect(x-4*s, y+5*s,  3*s, 2*s);
+  ctx.fillStyle = '#a86020';
+  ctx.fillRect(x-2*s, y+5*s,  3*s, 3*s);  // tail base
+
+  // BODY — slender
   ctx.fillStyle = '#c07020';
-  ctx.fillRect(x, y+4*s, 12*s, 7*s);
-  // Head
-  ctx.fillStyle = '#d08030';
-  ctx.fillRect(x+8*s, y, 10*s, 8*s);
-  // Crest on head
-  ctx.fillStyle = '#e8a040';
-  for (let i = 0; i < 4; i++) ctx.fillRect(x+9*s+i*2*s, y-2*s, s, 3*s+i*s);
-  // Tail (curled)
-  ctx.fillStyle = '#b06010';
-  ctx.fillRect(x-4*s, y+6*s, 5*s, 3*s);
-  ctx.fillRect(x-6*s, y+8*s, 3*s, 4*s);
-  // Legs
-  ctx.fillStyle = '#c07020';
-  ctx.fillRect(x+2*s, y+10*s, 2*s, 4*s);
-  ctx.fillRect(x+7*s, y+10*s, 2*s, 4*s);
-  // Eye
+  ctx.fillRect(x,      y+4*s, 11*s, 5*s);
+  // Dorsal stripe (lateral line pattern)
+  ctx.fillStyle = '#e8b050';
+  ctx.fillRect(x+s,    y+4*s,  9*s, s  );
+  // Ventral (paler belly)
+  ctx.fillStyle = '#e8c870';
+  ctx.fillRect(x+s,    y+8*s,  9*s, s  );
+
+  // DORSAL CRESTS — fan-like spines running from neck down back (key crestie feature)
+  ctx.fillStyle = '#f0b040';
+  ctx.fillRect(x+2*s,  y+3*s,  s,   2*s);
+  ctx.fillRect(x+4*s,  y+2*s,  s,   3*s);
+  ctx.fillRect(x+6*s,  y+3*s,  s,   2*s);
+  ctx.fillRect(x+8*s,  y+2*s,  s,   3*s);
+  ctx.fillRect(x+10*s, y+s,    s,   4*s);  // tallest, near neck
+
+  // NECK
+  ctx.fillStyle = '#c87828';
+  ctx.fillRect(x+10*s, y+4*s,  3*s, 5*s);
+
+  // HEAD — triangular, flares wide at temples, slightly narrow snout
+  ctx.fillStyle = '#d88030';
+  ctx.fillRect(x+12*s, y+2*s,  5*s, 8*s);  // main skull
+  ctx.fillRect(x+17*s, y+3*s,  3*s, 6*s);  // snout
+  ctx.fillStyle = '#c87020';
+  ctx.fillRect(x+19*s, y+4*s,  2*s, 4*s);  // snout tip
+
+  // SUPRAORBITAL RIDGE — the "eyelash" crests above eyes (iconic crested gecko feature)
+  ctx.fillStyle = '#f5c050';
+  ctx.fillRect(x+12*s, y+2*s,  s,   s  );  // brow ridge
+  ctx.fillRect(x+13*s, y+s,    3*s, 2*s);  // raised head crest
+  ctx.fillRect(x+13*s, y,      s,   s  );  // crest peak
+
+  // EYE — very large relative to head (geckos have huge eyes)
+  ctx.fillStyle = '#1a0a00';
+  ctx.fillRect(x+13*s, y+3*s,  3*s, 4*s);  // eye socket
+  ctx.fillStyle = '#f5c800';                // bright amber iris
+  ctx.fillRect(x+13*s, y+3*s,  3*s, 3*s);
   ctx.fillStyle = C.black;
-  ctx.fillRect(x+14*s, y+2*s, 3*s, 3*s);
-  ctx.fillStyle = '#ffff80';
-  ctx.fillRect(x+15*s, y+2*s, s, s);
-  // Mouth - open if threatening
+  ctx.fillRect(x+14*s, y+3*s,  s,   3*s);  // vertical slit pupil
+  ctx.fillStyle = '#ffffa0';
+  ctx.fillRect(x+13*s, y+3*s,  s,   s  );  // highlight
+
+  // FRONT LEGS — longer, more slender than skink
+  ctx.fillStyle = '#b06018';
+  ctx.fillRect(x+17*s, y+9*s,  2*s, 4*s);
+  ctx.fillRect(x+15*s, y+12*s, 3*s, s  );  // foot
+  ctx.fillStyle = '#f0d080';
+  ctx.fillRect(x+15*s, y+13*s, s,   s  );  // toe pad
+  ctx.fillRect(x+16*s, y+13*s, s,   s  );
+
+  // BACK LEGS
+  ctx.fillStyle = '#b06018';
+  ctx.fillRect(x+6*s,  y+9*s,  2*s, 4*s);
+  ctx.fillRect(x+4*s,  y+12*s, 3*s, s  );
+  ctx.fillStyle = '#f0d080';
+  ctx.fillRect(x+4*s,  y+13*s, s,   s  );
+  ctx.fillRect(x+5*s,  y+13*s, s,   s  );
+
+  // MOUTH
   if (threatening) {
     ctx.fillStyle = '#ff2020';
-    ctx.fillRect(x+10*s, y+5*s, 8*s, 4*s);
+    ctx.fillRect(x+13*s, y+8*s,  8*s, 3*s);  // wide gape
     ctx.fillStyle = '#ffff80';
-    // teeth
-    ctx.fillRect(x+11*s, y+5*s, s, 2*s);
-    ctx.fillRect(x+13*s, y+5*s, s, 2*s);
-    ctx.fillRect(x+15*s, y+5*s, s, 2*s);
-    ctx.fillRect(x+17*s, y+5*s, s, 2*s);
+    ctx.fillRect(x+14*s, y+8*s,  s,   s  );
+    ctx.fillRect(x+16*s, y+8*s,  s,   s  );
+    ctx.fillRect(x+18*s, y+8*s,  s,   s  );
+    ctx.fillStyle = '#ff8888';
+    ctx.fillRect(x+19*s, y+9*s,  2*s, s  );  // pink tongue tip
   } else {
-    ctx.fillStyle = '#c06010';
-    ctx.fillRect(x+10*s, y+6*s, 8*s, 2*s);
+    ctx.fillStyle = '#b05010';
+    ctx.fillRect(x+13*s, y+9*s,  7*s, s  );  // closed mouth line
   }
 }
 
@@ -538,43 +587,85 @@ function drawBluetongueHide(x, y) {
 function drawBluetongue(x, y, anim) {
   const threatening = anim.threatening;
   const s = 3;
-  // Longer, flatter body
-  ctx.fillStyle = '#5a8a6a';
-  ctx.fillRect(x, y+4*s, 16*s, 5*s);
-  // Head (broader)
-  ctx.fillStyle = '#6a9a7a';
-  ctx.fillRect(x+12*s, y+s, 9*s, 7*s);
-  // Scales pattern
-  ctx.fillStyle = '#4a7a5a';
-  for (let i = 0; i < 7; i++) ctx.fillRect(x+i*2*s, y+4*s, s, 2*s);
-  // Side stripes
-  ctx.fillStyle = '#8ab070';
-  ctx.fillRect(x, y+4*s, 16*s, s);
-  // Tail
-  ctx.fillStyle = '#4a7a5a';
-  ctx.fillRect(x-6*s, y+5*s, 7*s, 3*s);
-  ctx.fillRect(x-9*s, y+6*s, 4*s, 2*s);
-  // Legs (stubby)
-  ctx.fillStyle = '#5a8a6a';
-  ctx.fillRect(x+2*s, y+9*s, 3*s, 3*s);
-  ctx.fillRect(x+9*s, y+9*s, 3*s, 3*s);
-  // Eye
+
+  // TAIL — short, fat, tapers sharply (very different from gecko's long tail)
+  ctx.fillStyle = '#6a7050';
+  ctx.fillRect(x-7*s, y+6*s,  2*s, 3*s);  // tip (still thick)
+  ctx.fillStyle = '#7a8060';
+  ctx.fillRect(x-5*s, y+5*s,  2*s, 4*s);
+  ctx.fillStyle = '#8a9070';
+  ctx.fillRect(x-3*s, y+4*s,  3*s, 5*s);  // tail base
+
+  // BODY — heavy, cylindrical sausage
+  ctx.fillStyle = '#c0a050';
+  ctx.fillRect(x,      y+3*s, 15*s, 8*s);
+
+  // DARK CROSSBANDS — very prominent, key bluetongue identifier
+  ctx.fillStyle = '#2c1608';
+  ctx.fillRect(x+s,    y+3*s,  2*s, 8*s);
+  ctx.fillRect(x+5*s,  y+3*s,  2*s, 8*s);
+  ctx.fillRect(x+9*s,  y+3*s,  2*s, 8*s);
+  ctx.fillRect(x+13*s, y+3*s,  2*s, 8*s);
+  // Pale belly
+  ctx.fillStyle = '#f0e8c0';
+  ctx.fillRect(x+s,    y+10*s, 13*s, s  );
+
+  // NECK — noticeably narrower than both body and head
+  ctx.fillStyle = '#b09848';
+  ctx.fillRect(x+15*s, y+5*s,  3*s, 5*s);
+
+  // HEAD — wide, flat, triangular (the most distinctive bluetongue feature)
+  // Back of head wider than neck, top completely flat
+  ctx.fillStyle = '#c8a058';
+  ctx.fillRect(x+17*s, y+2*s, 10*s, 10*s);  // large head block
+  ctx.fillStyle = '#d8b068';
+  ctx.fillRect(x+17*s, y+2*s, 10*s, 2*s);   // flat head top
+  // Snout tapers toward tip
+  ctx.fillStyle = '#b89048';
+  ctx.fillRect(x+25*s, y+4*s,  3*s, 6*s);
+  ctx.fillStyle = '#a88040';
+  ctx.fillRect(x+27*s, y+5*s,  s,   4*s);   // snout tip
+  // Head spots/speckles
+  ctx.fillStyle = '#805030';
+  ctx.fillRect(x+19*s, y+2*s,  s,   s  );
+  ctx.fillRect(x+22*s, y+2*s,  s,   s  );
+  ctx.fillRect(x+24*s, y+2*s,  s,   s  );
+
+  // EYE — small and round/beady (contrast to gecko's huge eyes)
+  ctx.fillStyle = '#1a1000';
+  ctx.fillRect(x+20*s, y+4*s,  3*s, 3*s);
+  ctx.fillStyle = '#c8a820';                 // dull golden iris (not bright like gecko)
+  ctx.fillRect(x+20*s, y+4*s,  2*s, 2*s);
   ctx.fillStyle = C.black;
-  ctx.fillRect(x+17*s, y+2*s, 3*s, 3*s);
-  ctx.fillStyle = '#f0f000';
-  ctx.fillRect(x+18*s, y+2*s, s, s);
-  // Mouth + tongue
+  ctx.fillRect(x+20*s, y+4*s,  s,   s  );   // round pupil (not slit)
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+19*s, y+4*s,  s,   s  );   // highlight
+
+  // FRONT LEGS — very short and stubby (almost comically short)
+  ctx.fillStyle = '#a88840';
+  ctx.fillRect(x+19*s, y+12*s, 4*s, 2*s);   // front leg (wide & short)
+  ctx.fillRect(x+18*s, y+13*s, 5*s, s  );   // front foot (wide toes)
+  // BACK LEGS — also very short
+  ctx.fillRect(x+3*s,  y+11*s, 4*s, 2*s);
+  ctx.fillRect(x+2*s,  y+12*s, 5*s, s  );
+
+  // MOUTH + TONGUE
   if (threatening) {
-    ctx.fillStyle = '#e03030';
-    ctx.fillRect(x+13*s, y+6*s, 8*s, 3*s);
-    // Blue tongue extended
-    ctx.fillStyle = '#4a90d9';
-    ctx.fillRect(x+21*s, y+6*s, 5*s, 2*s);
-    ctx.fillRect(x+24*s, y+5*s, 3*s, s);
-    ctx.fillRect(x+24*s, y+8*s, 3*s, s);
+    ctx.fillStyle = '#c83020';
+    ctx.fillRect(x+18*s, y+10*s, 10*s, 4*s);  // wide open gape
+    // BLUE TONGUE — the signature feature
+    ctx.fillStyle = '#1848c0';
+    ctx.fillRect(x+27*s, y+11*s, 6*s, 2*s);
+    ctx.fillStyle = '#1040a8';
+    ctx.fillRect(x+32*s, y+10*s, 2*s, s  );   // tongue fork top
+    ctx.fillRect(x+32*s, y+12*s, 2*s, s  );   // tongue fork bottom
+    ctx.fillStyle = '#f0f0e0';
+    ctx.fillRect(x+20*s, y+10*s, s,   s  );   // teeth
+    ctx.fillRect(x+22*s, y+10*s, s,   s  );
+    ctx.fillRect(x+24*s, y+10*s, s,   s  );
   } else {
-    ctx.fillStyle = '#5a8070';
-    ctx.fillRect(x+13*s, y+6*s, 8*s, 2*s);
+    ctx.fillStyle = '#907040';
+    ctx.fillRect(x+19*s, y+11*s, 8*s, s  );   // closed mouth line
   }
 }
 
