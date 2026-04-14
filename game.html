@@ -19,6 +19,7 @@
 
 <div id="game-nav">
   <button class="pixel-btn small" id="btn-nav-home" onclick="doGoHome()">홈</button>
+  <button class="pixel-btn small" id="btn-nav-reselect" onclick="doReselect()" style="background:#8a5a1a;color:#f0d080;display:none">다시 선택</button>
   <button class="pixel-btn small red" id="btn-nav-logout" onclick="doLogout()">로그아웃</button>
 </div>
 
@@ -61,6 +62,18 @@
   <!-- Message box -->
   <div id="msg-box"></div>
 
+  <!-- Reselect confirm modal -->
+  <div id="reselect-modal" style="display:none">
+    <div class="modal-panel">
+      <h2 id="reselect-title"></h2>
+      <p id="reselect-msg" style="white-space:pre-line;font-size:8px;line-height:1.8"></p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+        <button class="pixel-btn red" style="width:100%" id="reselect-yes" onclick="confirmReselect()"></button>
+        <button class="pixel-btn" style="width:100%;background:#3a7a3a;color:#fff" id="reselect-no" onclick="cancelReselect()"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Name modal -->
   <div id="name-modal" style="display:none">
     <div class="modal-panel">
@@ -84,6 +97,35 @@ function toggleGameLang() {
   updateGameLabels();
 }
 
+function doReselect() {
+  const modal = document.getElementById('reselect-modal');
+  document.getElementById('reselect-title').textContent = t('reselect_title');
+  document.getElementById('reselect-msg').textContent = t('reselect_msg');
+  document.getElementById('reselect-yes').textContent = t('reselect_yes');
+  document.getElementById('reselect-no').textContent = t('reselect_no');
+  modal.style.display = 'flex';
+}
+
+function confirmReselect() {
+  document.getElementById('reselect-modal').style.display = 'none';
+  // Clear game state
+  AUTH.saveGameState(null);
+  AUTH.saveLizardName('');
+  gs = null;
+  lizardType = null;
+  lizardName = '';
+  scene = SCENE.SHOP;
+  bornAnim.phase = 0;
+  bornAnim.timer = 0;
+  document.getElementById('ui-overlay').style.display = 'none';
+  document.getElementById('date-display').style.display = 'none';
+  document.getElementById('btn-nav-reselect').style.display = 'none';
+}
+
+function cancelReselect() {
+  document.getElementById('reselect-modal').style.display = 'none';
+}
+
 function updateGameLabels() {
   document.getElementById('lbl-hunger').textContent = t('hunger');
   document.getElementById('lbl-happy').textContent = t('happy');
@@ -96,6 +138,7 @@ function updateGameLabels() {
   const wKey = (typeof lizardType !== 'undefined' && lizardType === 'bluetongue') ? 'water_btn_bt' : 'water_btn';
   document.getElementById('btn-water').textContent = t(wKey);
   document.getElementById('btn-nav-home').textContent = t('home_btn');
+  document.getElementById('btn-nav-reselect').textContent = t('reselect_btn');
   document.getElementById('btn-nav-logout').textContent = t('logout');
 }
 

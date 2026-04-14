@@ -60,6 +60,11 @@ const T = {
     go_game: "게임 시작",
     logout: "로그아웃",
     home_btn: "홈",
+    reselect_btn: "다시 선택",
+    reselect_title: "도마뱀 다시 선택하기",
+    reselect_msg: "현재 도마뱀과의 모든 기록이\n사라집니다. 정말 처음부터\n다시 시작하시겠어요?",
+    reselect_yes: "네, 다시 선택할게요",
+    reselect_no: "아니요, 계속 키울게요",
   },
   en: {
     title: "HAVE REPTILE GAME",
@@ -122,6 +127,11 @@ const T = {
     go_game: "Play Game",
     logout: "Logout",
     home_btn: "Home",
+    reselect_btn: "Re-select",
+    reselect_title: "Re-select Lizard",
+    reselect_msg: "All progress with your current\nlizard will be lost. Are you\nsure you want to start over?",
+    reselect_yes: "Yes, start over",
+    reselect_no: "No, keep going",
   }
 };
 

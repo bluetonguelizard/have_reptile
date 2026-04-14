@@ -873,6 +873,7 @@ window.addEventListener('load', () => {
   // Update date display if in room
   if (scene === SCENE.ROOM && gs) {
     document.getElementById('date-display').style.display = 'block';
+    document.getElementById('btn-nav-reselect').style.display = 'inline-block';
     if (gs.bornAnim) document.getElementById('ui-overlay').style.display = 'flex';
   }
 
@@ -966,4 +967,5 @@ function confirmName() {
   gs.scene = SCENE.ROOM;
   saveGame();
   document.getElementById('date-display').style.display = 'block';
+  document.getElementById('btn-nav-reselect').style.display = 'inline-block';
 }
