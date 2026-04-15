@@ -63,6 +63,10 @@ function newGameState(type) {
     chicoryStock: 0,
     pelletCount: 0,
     cgestieFoodCount: 0,
+    dandelionStock: 0,
+    lastDandelionGatherDay: -1,
+    springNotifiedYear: 0,
+    coins: 0,
   };
 }
 
@@ -1322,6 +1326,15 @@ window.addEventListener('load', () => {
           showMsg(t('hungry_msg'), 4000);
         }
       }
+      // Show spring message when game month enters April (once per game year)
+      if (gs.bornAnim) {
+        const springDate = getGameDate();
+        if (springDate.month === 4 && springDate.year > (gs.springNotifiedYear || 0)) {
+          gs.springNotifiedYear = springDate.year;
+          showMsg(t('spring_msg'), 5000);
+          saveGame();
+        }
+      }
     }
   }, 5000);
 });
@@ -1644,6 +1657,12 @@ function updateFarmUI() {
   document.getElementById('lbl-cgestie-food').textContent = t('cgestie_food_label');
   document.getElementById('btn-cgestie-food-get').textContent = t('cgestie_food_get_btn');
   document.getElementById('btn-cgestie-feed-lizard').textContent = t('cgestie_feed_lizard_btn');
+  document.getElementById('lbl-dandelion-stock').textContent = t('dandelion_stock_label');
+  document.getElementById('btn-dandelion-gather').textContent = t('dandelion_gather_btn');
+  document.getElementById('btn-dandelion-feed-lizard').textContent = t('dandelion_feed_lizard_btn');
+  document.getElementById('btn-sell-dandelion').textContent = t('sell_dandelion_btn');
+  document.getElementById('btn-sell-chicory').textContent = t('sell_chicory_btn');
+  document.getElementById('coin-display').textContent = t('coin_label') + ': ' + (gs ? (gs.coins || 0) : 0);
   // Cricket stats
   const count = gs ? (gs.cricketCount || 0) : 0;
   document.getElementById('bar-cricket').style.width = (count / 150 * 100) + '%';
@@ -1681,6 +1700,22 @@ function updateFarmUI() {
   document.getElementById('bar-cgestie-food').style.width = (cgestieFood / 10 * 100) + '%';
   document.getElementById('cgestie-food-count-text').textContent = cgestieFood + ' / 10';
   document.getElementById('btn-cgestie-feed-lizard').disabled = cgestieFood < 1;
+  // Dandelion stats
+  const dandelionStock = gs ? (gs.dandelionStock || 0) : 0;
+  const gameMonth = gs ? getGameDate().month : 0;
+  const inDandelionSeason = gameMonth >= 4 && gameMonth <= 8;
+  const gatheredToday = gs && gs.lastDandelionGatherDay === gs.gameDaysPassed;
+  document.getElementById('dandelion-stock-text').textContent = dandelionStock + ' / 10';
+  document.getElementById('bar-dandelion').style.width = (dandelionStock / 10 * 100) + '%';
+  document.getElementById('dandelion-season-info').textContent = inDandelionSeason
+    ? (gatheredToday ? t('dandelion_gathered_today') : t('dandelion_available'))
+    : t('dandelion_out_of_season');
+  document.getElementById('dandelion-season-info').style.color = inDandelionSeason
+    ? (gatheredToday ? '#4adb4a' : '#c8e84a') : '#888';
+  document.getElementById('btn-dandelion-gather').disabled = !inDandelionSeason || gatheredToday || dandelionStock >= 10;
+  document.getElementById('btn-dandelion-feed-lizard').disabled = dandelionStock < 1;
+  document.getElementById('btn-sell-dandelion').disabled = dandelionStock < 1;
+  document.getElementById('btn-sell-chicory').disabled = chicStock < 1;
   drawFarmCricketCanvas();
   drawFarmChicoryCanvas();
 }
@@ -1791,6 +1826,57 @@ function doCgestieFeedLizard() {
   showMsg(t('cgestie_food_feed_ok'));
   saveGame();
   closeFarm();
+}
+
+function doDandelionGather() {
+  if (!gs) return;
+  const gameMonth = getGameDate().month;
+  if (gameMonth < 4 || gameMonth > 8) { showMsg(t('dandelion_out_of_season')); return; }
+  if (gs.lastDandelionGatherDay === gs.gameDaysPassed) { showMsg(t('dandelion_gathered_today')); return; }
+  if ((gs.dandelionStock || 0) >= 10) { showMsg(t('dandelion_stock_max')); return; }
+  const gathered = Math.floor(Math.random() * 3) + 1; // 1~3개
+  gs.dandelionStock = Math.min(10, (gs.dandelionStock || 0) + gathered);
+  gs.lastDandelionGatherDay = gs.gameDaysPassed;
+  showMsg(t('dandelion_gather_ok').replace('{n}', gathered));
+  saveGame();
+  updateFarmUI();
+}
+
+function doDandelionFeedLizard() {
+  if (!gs || !gs.bornAnim) return;
+  if (lizardType === 'crestie') { showMsg(t('dandelion_crestie_no')); return; }
+  if ((gs.dandelionStock || 0) < 1) { showMsg(t('dandelion_feed_none')); return; }
+  gs.dandelionStock -= 1;
+  gs.hunger = Math.min(100, gs.hunger + 20);
+  gs.happy = Math.min(100, gs.happy + 15);
+  gs.hydration = Math.min(100, (gs.hydration || 0) + 10);
+  showMsg(t('dandelion_feed_ok'));
+  saveGame();
+  closeFarm();
+}
+
+function doSellDandelion() {
+  if (!gs) return;
+  const stock = gs.dandelionStock || 0;
+  if (stock < 1) { showMsg(t('sell_none_dandelion')); return; }
+  const earned = stock * 2;
+  gs.dandelionStock = 0;
+  gs.coins = (gs.coins || 0) + earned;
+  showMsg(t('sell_dandelion_ok').replace('{n}', stock).replace('{c}', earned));
+  saveGame();
+  updateFarmUI();
+}
+
+function doSellChicory() {
+  if (!gs) return;
+  const stock = gs.chicoryStock || 0;
+  if (stock < 1) { showMsg(t('sell_none_chicory')); return; }
+  const earned = stock * 5;
+  gs.chicoryStock = 0;
+  gs.coins = (gs.coins || 0) + earned;
+  showMsg(t('sell_chicory_ok').replace('{n}', stock).replace('{c}', earned));
+  saveGame();
+  updateFarmUI();
 }
 
 function doCricketCare() {

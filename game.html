@@ -71,6 +71,7 @@
     <div class="modal-panel farm-panel">
       <div class="farm-header">
         <h2 id="farm-title"></h2>
+        <span id="coin-display" style="font-size:8px;color:#e8c030;white-space:nowrap"></span>
         <button class="pixel-btn small red" onclick="closeFarm()">✕</button>
       </div>
       <div class="tab-btns">
@@ -138,6 +139,23 @@
         </div>
         <div class="farm-btns" style="margin-top:4px">
           <button class="pixel-btn small green" id="btn-chicory-feed-lizard" onclick="doChicoryFeedLizard()"></button>
+          <button class="pixel-btn small" id="btn-sell-chicory" onclick="doSellChicory()" style="background:#e8c030;color:#1a1a1a"></button>
+        </div>
+        <!-- Dandelion section -->
+        <div style="border-top:1px solid #3a4a2a;margin-top:8px;padding-top:6px">
+          <div class="farm-stat-row">
+            <span class="stat-label" id="lbl-dandelion-stock"></span>
+            <div class="stat-bar wide"><div class="stat-fill" id="bar-dandelion" style="width:0%;background:#c8e84a"></div></div>
+            <span id="dandelion-stock-text" style="font-size:7px;color:#c8e84a;white-space:nowrap">0 / 10</span>
+          </div>
+          <p id="dandelion-season-info" class="farm-info"></p>
+          <div class="farm-btns">
+            <button class="pixel-btn small" id="btn-dandelion-gather" onclick="doDandelionGather()" style="background:#7ab520;color:#fff"></button>
+            <button class="pixel-btn small green" id="btn-dandelion-feed-lizard" onclick="doDandelionFeedLizard()"></button>
+          </div>
+          <div class="farm-btns" style="margin-top:4px">
+            <button class="pixel-btn small" id="btn-sell-dandelion" onclick="doSellDandelion()" style="background:#e8c030;color:#1a1a1a"></button>
+          </div>
         </div>
       </div>
     </div>
