@@ -38,6 +38,7 @@ function newGameState(type) {
     bond: 10,         // 0-100
     weight: type === 'crestie' ? 3 : 80, // grams
     handleCountToday: 0,
+    waterCountToday: 0,
     lastFedGameDay: -2,
     lastFedWeekDay: [],
     isAdult: false,
@@ -51,10 +52,13 @@ function newGameState(type) {
     isSleeping: false,
     cricketCount: 0,
     lastCricketBreedDay: 0,
+    lastCricketCareDay: -1,
     chicoryState: 'none',     // 'none' | 'growing' | 'ready'
     chicoryPlantedDay: 0,
     chicoryWateredDays: 0,
     chicoryLastWateredDay: -1,
+    chicoryStock: 0,
+    pelletCount: 0,
   };
 }
 
@@ -95,9 +99,10 @@ function updateGameTime() {
     // decay stats per day
     gs.hunger = Math.max(0, gs.hunger - daysElapsed * 8);
     gs.happy = Math.max(0, gs.happy - daysElapsed * 5);
-    gs.hydration = Math.max(0, (gs.hydration || 80) - daysElapsed * 12);
+    gs.hydration = Math.max(0, (gs.hydration || 80) - daysElapsed * 30);
     if (gs.hydration < 20) gs.happy = Math.max(0, gs.happy - daysElapsed * 3);
     gs.handleCountToday = 0; // reset daily handles
+    gs.waterCountToday = 0; // reset daily water count
     if (!gs.isAdult && gs.gameDaysPassed >= ADULT_GAME_DAYS) {
       gs.isAdult = true;
     }
@@ -107,6 +112,13 @@ function updateGameTime() {
       if (breedCycles > 0) {
         gs.cricketCount = Math.min(150, Math.round(gs.cricketCount * Math.pow(1.25, breedCycles)));
         gs.lastCricketBreedDay = (gs.lastCricketBreedDay || 0) + breedCycles * 3;
+      }
+      // Cricket decay if not fed daily
+      if ((gs.lastCricketCareDay || -1) >= 0) {
+        const careMissed = gs.gameDaysPassed - (gs.lastCricketCareDay || 0) - 1;
+        if (careMissed > 0) {
+          gs.cricketCount = Math.max(0, gs.cricketCount - careMissed * 5);
+        }
       }
     }
     saveGame();
@@ -679,15 +691,17 @@ function drawBluetongue(x, y, anim) {
   ctx.fillRect(x+22*s, y+2*s,  s,   s  );
   ctx.fillRect(x+24*s, y+2*s,  s,   s  );
 
-  // EYE — small and round/beady (contrast to gecko's huge eyes)
-  ctx.fillStyle = '#1a1000';
+  // EYE — beady but visible (bluetongue skink eye with scaly eyelid rim)
+  ctx.fillStyle = '#3a2800';                 // outer scaly rim
+  ctx.fillRect(x+19*s, y+3*s,  5*s, 5*s);
+  ctx.fillStyle = '#1a1000';                 // eye socket
+  ctx.fillRect(x+20*s, y+4*s,  4*s, 4*s);
+  ctx.fillStyle = '#e8c030';                 // bright golden iris
   ctx.fillRect(x+20*s, y+4*s,  3*s, 3*s);
-  ctx.fillStyle = '#c8a820';                 // dull golden iris (not bright like gecko)
-  ctx.fillRect(x+20*s, y+4*s,  2*s, 2*s);
   ctx.fillStyle = C.black;
-  ctx.fillRect(x+20*s, y+4*s,  s,   s  );   // round pupil (not slit)
+  ctx.fillRect(x+20*s, y+4*s,  2*s, 2*s);   // round pupil
   ctx.fillStyle = '#fff';
-  ctx.fillRect(x+19*s, y+4*s,  s,   s  );   // highlight
+  ctx.fillRect(x+21*s, y+4*s,  s,   s  );   // highlight (top-right of pupil)
 
   // FRONT LEGS — very short and stubby (almost comically short)
   ctx.fillStyle = '#a88840';
@@ -718,11 +732,13 @@ function drawBluetongue(x, y, anim) {
 
   // SLEEPING — override eyes, draw Zzz
   if (anim.sleeping) {
-    // closed eyes
+    // closed eyes (cover with lid over the larger eye area)
+    ctx.fillStyle = '#3a2800';
+    ctx.fillRect(x+19*s, y+3*s,  5*s, 5*s);  // eyelid rim stays
+    ctx.fillStyle = '#805030';
+    ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);   // shut eyelid
     ctx.fillStyle = '#1a1000';
-    ctx.fillRect(x+20*s, y+5*s, 3*s, s);
-    ctx.fillRect(x+20*s, y+6*s, s, s);
-    ctx.fillRect(x+22*s, y+6*s, s, s);
+    ctx.fillRect(x+20*s, y+5*s, 4*s, s);     // closed line
     drawZzz(x + 28*s, y - s);
   }
 }
@@ -824,6 +840,7 @@ function doHandle() {
 
 function doFeed() {
   if (!gs || !gs.bornAnim) return;
+  if (lizardType === 'crestie') { showMsg(t('feed_crestie_only_cricket')); return; }
   const currentDay = gs.gameDaysPassed;
   if (currentDay - gs.lastFedGameDay < 2) {
     showMsg(t('feed_no')); return;
@@ -840,9 +857,10 @@ function doFeed() {
 
 function doWater() {
   if (!gs || !gs.bornAnim) return;
-  if ((gs.hydration || 0) > 70) { showMsg(t('water_no')); return; }
-  gs.hydration = Math.min(100, (gs.hydration || 0) + 50);
+  if ((gs.waterCountToday || 0) >= 2) { showMsg(t('water_no')); return; }
+  gs.hydration = Math.min(100, (gs.hydration || 0) + 25);
   gs.happy = Math.min(100, gs.happy + 5);
+  gs.waterCountToday = (gs.waterCountToday || 0) + 1;
   const key = lizardType === 'crestie' ? 'water_ok' : 'water_ok_bt';
   showMsg(t(key));
   saveGame();
@@ -979,19 +997,35 @@ window.addEventListener('load', () => {
 
   requestAnimationFrame(gameLoop);
 
-  // Setinterval to update date display + sleepy message
+  // Setinterval to update date display + sleepy/thirsty/hungry message
   let lastSleepyMsgTime = 0;
+  let lastThirstyMsgTime = 0;
+  let lastHungryMsgTime = 0;
   setInterval(() => {
     if (scene === SCENE.ROOM && gs) {
       updateGameTime();
       const gd = getGameDate();
       document.getElementById('date-display').textContent = formatDate(gd);
+      const now = Date.now();
       // Show sleepy message periodically at night (every 60s)
       if (gs.bornAnim && !gs.isSleeping && isSleepyHour()) {
-        const now = Date.now();
         if (now - lastSleepyMsgTime > 60000) {
           lastSleepyMsgTime = now;
           showMsg(t('sleepy_msg'), 4000);
+        }
+      }
+      // Show thirsty message when hydration is low (every 90s)
+      if (gs.bornAnim && !gs.isSleeping && (gs.hydration || 0) < 30) {
+        if (now - lastThirstyMsgTime > 90000) {
+          lastThirstyMsgTime = now;
+          showMsg(t('thirsty_msg'), 4000);
+        }
+      }
+      // Show hungry message when it's feeding day (every 90s)
+      if (gs.bornAnim && !gs.isSleeping && gs.gameDaysPassed - gs.lastFedGameDay >= 2) {
+        if (now - lastHungryMsgTime > 90000) {
+          lastHungryMsgTime = now;
+          showMsg(t('hungry_msg'), 4000);
         }
       }
     }
@@ -1302,14 +1336,28 @@ function updateFarmUI() {
   document.getElementById('btn-chicory-plant').textContent = t('chicory_plant_btn');
   document.getElementById('btn-chicory-water').textContent = t('chicory_water_btn');
   document.getElementById('btn-chicory-harvest').textContent = t('chicory_harvest_btn');
+  document.getElementById('btn-chicory-feed-lizard').textContent = t('chicory_feed_lizard_btn');
+  document.getElementById('lbl-pellet').textContent = t('pellet_label');
+  document.getElementById('btn-pellet-get').textContent = t('pellet_get_btn');
+  document.getElementById('btn-cricket-care').textContent = t('cricket_care_btn');
+  document.getElementById('lbl-chicory-stock').textContent = t('chicory_stock_label');
   // Cricket stats
   const count = gs ? (gs.cricketCount || 0) : 0;
   document.getElementById('bar-cricket').style.width = (count / 150 * 100) + '%';
   document.getElementById('cricket-count-text').textContent = count + ' / 150';
+  const caredToday = gs && gs.lastCricketCareDay === gs.gameDaysPassed;
+  document.getElementById('cricket-care-status').textContent =
+    count > 0 ? (caredToday ? t('cricket_care_status_ok') : t('cricket_care_status_need')) : '';
+  document.getElementById('cricket-care-status').style.color = caredToday ? '#4adb4a' : '#e84a4a';
   document.getElementById('cricket-info').textContent =
     count > 0 ? (currentLang === 'ko' ? `3일마다 자동 번식 (+25%)` : `Auto-breeds every 3 days (+25%)`) : '';
+  // Pellet stats
+  const pellets = gs ? (gs.pelletCount || 0) : 0;
+  document.getElementById('pellet-count-text').textContent = pellets + ' / 10';
+  document.getElementById('bar-pellet').style.width = (pellets / 10 * 100) + '%';
   // Chicory stats
   const chicState = gs ? (gs.chicoryState || 'none') : 'none';
+  const chicStock = gs ? (gs.chicoryStock || 0) : 0;
   const growthDays = gs ? Math.min(5, (gs.gameDaysPassed - (gs.chicoryPlantedDay||0)) + (gs.chicoryWateredDays||0)) : 0;
   const growthPct = chicState === 'none' ? 0 : (chicState === 'ready' ? 100 : Math.round(growthDays / 5 * 100));
   document.getElementById('bar-chicory').style.width = growthPct + '%';
@@ -1319,10 +1367,12 @@ function updateFarmUI() {
   document.getElementById('chicory-info').textContent =
     chicState === 'growing' ? t('chicory_info_growing') + ` (${growthDays}/5)` :
     chicState === 'ready' ? t('chicory_info_ready') : '';
+  document.getElementById('chicory-stock-text').textContent = chicStock;
   // Button enable/disable
   document.getElementById('btn-chicory-plant').disabled = chicState !== 'none';
   document.getElementById('btn-chicory-water').disabled = chicState !== 'growing';
   document.getElementById('btn-chicory-harvest').disabled = chicState !== 'ready';
+  document.getElementById('btn-chicory-feed-lizard').disabled = chicStock < 1;
   drawFarmCricketCanvas();
   drawFarmChicoryCanvas();
 }
@@ -1332,6 +1382,7 @@ function doCricketGet() {
   if ((gs.cricketCount || 0) >= 150) { showMsg(t('cricket_get_max')); return; }
   gs.cricketCount = Math.min(150, (gs.cricketCount || 0) + 20);
   gs.lastCricketBreedDay = gs.gameDaysPassed;
+  if ((gs.lastCricketCareDay || -1) < 0) gs.lastCricketCareDay = gs.gameDaysPassed;
   showMsg(t('cricket_get_ok'));
   saveGame();
   updateFarmUI();
@@ -1382,10 +1433,44 @@ function doChicoryHarvest() {
   if (!gs) return;
   if (gs.chicoryState !== 'ready') { showMsg(t('chicory_harvest_none')); return; }
   gs.chicoryState = 'none';
+  gs.chicoryStock = (gs.chicoryStock || 0) + 1;
+  showMsg(t('chicory_harvest_ok'));
+  saveGame();
+  updateFarmUI();
+}
+
+function doChicoryFeedLizard() {
+  if (!gs || !gs.bornAnim) return;
+  if (lizardType === 'crestie') { showMsg(t('chicory_crestie_no')); return; }
+  if ((gs.chicoryStock || 0) < 1) { showMsg(t('chicory_feed_lizard_none')); return; }
+  gs.chicoryStock -= 1;
   gs.hunger = Math.min(100, gs.hunger + 25);
   gs.happy = Math.min(100, gs.happy + 20);
   gs.hydration = Math.min(100, (gs.hydration || 0) + 15);
-  showMsg(t('chicory_harvest_ok'));
+  showMsg(t('chicory_feed_lizard_ok'));
   saveGame();
   closeFarm();
+}
+
+function doPelletGet() {
+  if (!gs) return;
+  if ((gs.pelletCount || 0) >= 10) { showMsg(t('pellet_get_max')); return; }
+  gs.pelletCount = Math.min(10, (gs.pelletCount || 0) + 5);
+  showMsg(t('pellet_get_ok'));
+  saveGame();
+  updateFarmUI();
+}
+
+function doCricketCare() {
+  if (!gs) return;
+  if ((gs.cricketCount || 0) === 0) { showMsg(t('cricket_care_none')); return; }
+  if ((gs.chicoryStock || 0) < 1) { showMsg(t('cricket_care_no_chicory')); return; }
+  if ((gs.pelletCount || 0) < 1) { showMsg(t('cricket_care_no_pellet')); return; }
+  if (gs.lastCricketCareDay === gs.gameDaysPassed) { showMsg(t('cricket_care_already')); return; }
+  gs.chicoryStock -= 1;
+  gs.pelletCount -= 1;
+  gs.lastCricketCareDay = gs.gameDaysPassed;
+  showMsg(t('cricket_care_ok'));
+  saveGame();
+  updateFarmUI();
 }
