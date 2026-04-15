@@ -12,6 +12,7 @@
 <div class="top-right-panel">
   <!-- Date display -->
   <div id="date-display" style="display:none"></div>
+  <div id="time-display" style="display:none"></div>
   <div class="lang-toggle">
     <button class="pixel-btn small" onclick="toggleGameLang()">EN/KO</button>
   </div>
@@ -33,6 +34,7 @@
     <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
       <span id="lizard-name-label" style="font-size:9px;color:#e8a020;white-space:nowrap"></span>
       <span id="age-label" style="font-size:8px;color:#aaa;white-space:nowrap"></span>
+      <span id="weight-label" style="font-size:8px;color:#c8e860;white-space:nowrap"></span>
       <div class="stat-bar-wrap">
         <span class="stat-label" id="lbl-hunger"></span>
         <div class="stat-bar"><div class="stat-fill hunger" id="bar-hunger" style="width:80%"></div></div>
@@ -72,6 +74,7 @@
       </div>
       <div class="tab-btns">
         <button class="tab-btn active" id="tab-btn-cricket" onclick="switchFarmTab('cricket')"></button>
+        <button class="tab-btn" id="tab-btn-cgestie" onclick="switchFarmTab('cgestie')"></button>
         <button class="tab-btn" id="tab-btn-chicory" onclick="switchFarmTab('chicory')"></button>
       </div>
       <!-- Cricket panel -->
@@ -98,6 +101,18 @@
         <div class="farm-btns" style="margin-top:4px">
           <button class="pixel-btn small green" id="btn-cricket-care" onclick="doCricketCare()"></button>
           <button class="pixel-btn small blue" id="btn-cricket-feed" onclick="doCricketFeed()"></button>
+        </div>
+      </div>
+      <!-- Crestie food panel -->
+      <div id="farm-cgestie-panel" style="display:none">
+        <div class="farm-stat-row">
+          <span class="stat-label" id="lbl-cgestie-food"></span>
+          <div class="stat-bar wide"><div class="stat-fill" id="bar-cgestie-food" style="width:0%;background:#e87820"></div></div>
+          <span id="cgestie-food-count-text" style="font-size:7px;color:#e87820;white-space:nowrap">0 / 10</span>
+        </div>
+        <div class="farm-btns">
+          <button class="pixel-btn small" id="btn-cgestie-food-get" onclick="doCgestieFoodGet()" style="background:#e87820;color:#fff"></button>
+          <button class="pixel-btn small blue" id="btn-cgestie-feed-lizard" onclick="doCgestieFeedLizard()"></button>
         </div>
       </div>
       <!-- Chicory panel -->

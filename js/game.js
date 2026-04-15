@@ -59,6 +59,7 @@ function newGameState(type) {
     chicoryLastWateredDay: -1,
     chicoryStock: 0,
     pelletCount: 0,
+    cgestieFoodCount: 0,
   };
 }
 
@@ -151,6 +152,29 @@ function formatDate(gd) {
   return `${gd.year}/${String(gd.month).padStart(2,'0')}/${String(gd.day).padStart(2,'0')} ${days[gd.dow]}`;
 }
 
+function getGameTime() {
+  if (!gs) return { hour: 0, minute: 0 };
+  const elapsed = Date.now() - gs.lastGameDayRealTime;
+  const fraction = Math.min(elapsed / MS_PER_GAME_DAY, 1);
+  const totalMinutes = Math.floor(fraction * 24 * 60);
+  return { hour: Math.floor(totalMinutes / 60), minute: totalMinutes % 60 };
+}
+
+function formatTime(gt) {
+  return `${String(gt.hour).padStart(2,'0')}:${String(gt.minute).padStart(2,'0')}`;
+}
+
+function updateTimeDisplay() {
+  const el = document.getElementById('time-display');
+  if (!el) return;
+  if (scene === SCENE.ROOM && gs) {
+    el.style.display = 'block';
+    el.textContent = formatTime(getGameTime());
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 // ─── PIXEL ART HELPERS ──────────────────────────────────────────────────────
 function px(x, y, w, h, color) {
   ctx.fillStyle = color;
@@ -190,57 +214,147 @@ function drawZzz(x, y) {
 // ─── DRAW SCENES ─────────────────────────────────────────────────────────────
 function drawShop() {
   const W = canvas.width, H = canvas.height;
-  // Floor
-  px(0, H*0.6, W, H*0.4, '#3a2d1a');
-  // Wall
-  px(0, 0, W, H*0.6, '#2a1f0e');
-  // Wall bricks
-  ctx.fillStyle = '#3d2e15';
-  for (let r = 0; r < 6; r++) for (let c = 0; c < 20; c++) {
-    const off = r % 2 === 0 ? 0 : 40;
-    ctx.strokeStyle = '#4a3820';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(c * 80 + off, r * 56, 78, 54);
+
+  // Night sky gradient background
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, H*0.6);
+  skyGrad.addColorStop(0, '#0a0814');
+  skyGrad.addColorStop(1, '#1e1608');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, H*0.6);
+
+  // Brick wall — filled bricks with mortar gaps
+  const bw = 78, bh = 28, mortar = '#1a1208';
+  ctx.fillStyle = mortar;
+  ctx.fillRect(0, 0, W, H*0.6);
+  for (let r = 0; r < 14; r++) {
+    const off = r % 2 === 0 ? 0 : bw/2;
+    const by = r * (bh + 2);
+    if (by > H*0.6) break;
+    const shade = r < 3 ? '#3a2c14' : '#352812';
+    ctx.fillStyle = shade;
+    for (let c = -1; c < Math.ceil(W/bw)+1; c++) {
+      ctx.fillRect(c * (bw+2) + off + 1, by + 1, bw, bh);
+    }
+    // Brick highlight top edge
+    ctx.fillStyle = '#4a3a1a';
+    for (let c = -1; c < Math.ceil(W/bw)+1; c++) {
+      ctx.fillRect(c * (bw+2) + off + 1, by + 1, bw, 2);
+    }
   }
+
+  // Floor (cobblestone)
+  const floorGrad = ctx.createLinearGradient(0, H*0.6, 0, H);
+  floorGrad.addColorStop(0, '#28200f');
+  floorGrad.addColorStop(1, '#1e1808');
+  ctx.fillStyle = floorGrad;
+  ctx.fillRect(0, H*0.6, W, H*0.4);
+  ctx.strokeStyle = '#1a1408'; ctx.lineWidth = 1;
+  for (let fy = H*0.6; fy < H; fy += 20) {
+    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(W, fy); ctx.stroke();
+  }
+  for (let row = 0; row * 20 < H*0.4; row++) {
+    const fy = H*0.6 + row * 20;
+    for (let fx = row%2===0?0:55; fx < W; fx += 110) {
+      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx, fy+20); ctx.stroke();
+    }
+  }
+
+  // Shop sign glow
+  const sx = W/2 - 180, sy = 28, sw = 360, sh = 80;
+  const glowGrad = ctx.createRadialGradient(W/2, sy+sh/2, 10, W/2, sy+sh/2, 260);
+  glowGrad.addColorStop(0,   'rgba(232,168,32,0.28)');
+  glowGrad.addColorStop(0.6, 'rgba(180,110,10,0.08)');
+  glowGrad.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = glowGrad;
+  ctx.fillRect(0, 0, W, H*0.6);
+
   // Shop sign
-  const sx = W/2 - 180, sy = 30, sw = 360, sh = 80;
-  px(sx-6, sy-6, sw+12, sh+12, '#5c3a10'); // border
-  px(sx, sy, sw, sh, '#e8a020');
+  px(sx-8, sy-8, sw+16, sh+16, '#3a2008');  // deep shadow
+  px(sx-4, sy-4, sw+8, sh+8, '#7a5010');    // frame
+  px(sx, sy, sw, sh, '#f0a818');             // sign face
+  // Sign inner bevel
+  px(sx+3, sy+3, sw-6, 3, '#ffd060');
+  px(sx+3, sy+3, 3, sh-6, '#ffd060');
+  px(sx+3, sy+sh-6, sw-6, 3, '#b07010');
+  px(sx+sw-6, sy+3, 3, sh-6, '#b07010');
   // Sign text
   ctx.font = "bold 22px 'Press Start 2P', Galmuri11, monospace";
-  ctx.fillStyle = '#1a0a00';
   ctx.textAlign = 'center';
-  ctx.fillText('HAVE REPTILE', W/2, sy+32);
-  ctx.fillText('GAME', W/2, sy+62);
+  ctx.fillStyle = '#60340a';
+  ctx.fillText('HAVE REPTILE', W/2+2, sy+36);
+  ctx.fillText('GAME', W/2+2, sy+66);
+  ctx.fillStyle = '#1a0800';
+  ctx.fillText('HAVE REPTILE', W/2, sy+34);
+  ctx.fillText('GAME', W/2, sy+64);
   ctx.textAlign = 'left';
+
+  // Street lanterns (left & right)
+  for (let side = 0; side < 2; side++) {
+    const lx = side === 0 ? W*0.18 : W*0.82;
+    const ly = H*0.2;
+    // Pole
+    px(lx-3, ly, 6, H*0.42, '#4a3820');
+    // Lamp housing
+    px(lx-14, ly-30, 28, 26, '#5a4828');
+    px(lx-10, ly-26, 20, 18, '#ffe880');
+    // Glow
+    const lanGrad = ctx.createRadialGradient(lx, ly-16, 4, lx, ly-16, 90);
+    lanGrad.addColorStop(0,   'rgba(255,240,140,0.30)');
+    lanGrad.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = lanGrad;
+    ctx.fillRect(lx-100, ly-100, 200, 160);
+  }
+
   // Door
   const dx = W/2 - 60, dy = H*0.3, dw = 120, dh = H*0.31;
-  px(dx-8, dy-8, dw+16, dh+16, C.wood2);
-  px(dx, dy, dw, dh, '#8B4513');
-  px(dx+10, dy+10, dw-20, dh/2 - 10, '#a0561a');
-  px(dx+10, dy + dh/2+5, dw-20, dh/2 - 20, '#a0561a');
-  // door knob
-  px(dx+dw-22, dy+dh/2-8, 12, 12, '#e8c050');
-  // windows
+  px(dx-10, dy-10, dw+20, dh+10, '#2a1a08');
+  px(dx-4, dy-4, dw+8, dh+4, C.wood2);
+  px(dx, dy, dw, dh, '#7a3c10');
+  px(dx+6, dy+6, dw-12, dh/2-8, '#8c4818');
+  px(dx+6, dy+dh/2+4, dw-12, dh/2-16, '#8c4818');
+  // Door panel highlights
+  px(dx+6, dy+6, dw-12, 2, '#a05a28');
+  px(dx+6, dy+dh/2+4, dw-12, 2, '#a05a28');
+  // Door knob
+  px(dx+dw-24, dy+dh/2-10, 14, 14, '#f0d040');
+  px(dx+dw-22, dy+dh/2-8, 6, 6, '#fff8a0');
+
+  // Windows (with warm interior glow)
   for (let wi = 0; wi < 2; wi++) {
-    const wx = wi === 0 ? W/2 - 260 : W/2 + 140;
-    const wy = H*0.25;
-    px(wx-4, wy-4, 108, 88, C.wood2);
-    px(wx, wy, 100, 80, '#6ab8d4');
-    // window cross
+    const wx = wi === 0 ? W/2 - 265 : W/2 + 140;
+    const wy = H*0.24;
+    px(wx-6, wy-6, 112, 92, '#2a1a08');
+    px(wx-2, wy-2, 104, 84, C.wood2);
+    // Warm interior glow
+    const winGrad = ctx.createRadialGradient(wx+50, wy+40, 4, wx+50, wy+40, 55);
+    winGrad.addColorStop(0, 'rgba(255,220,140,0.85)');
+    winGrad.addColorStop(1, 'rgba(100,60,10,0.6)');
+    ctx.fillStyle = winGrad;
+    ctx.fillRect(wx, wy, 100, 80);
+    // Window cross
     px(wx+48, wy, 4, 80, C.wood2);
     px(wx, wy+38, 100, 4, C.wood2);
+    // Exterior window glow
+    const extGlow = ctx.createRadialGradient(wx+50, wy+40, 0, wx+50, wy+40, 80);
+    extGlow.addColorStop(0,   'rgba(255,200,80,0.12)');
+    extGlow.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = extGlow;
+    ctx.fillRect(wx-40, wy-30, 180, 150);
   }
-  // Shopkeeper (pixel man)
+
+  // Shopkeeper
   drawShopkeeper(W/2 - 140, H*0.35);
-  // Enter text
+
+  // Enter text (pulse effect via sin)
+  const pulse = 0.85 + Math.sin(Date.now() / 500) * 0.15;
   ctx.font = "11px 'Press Start 2P', Galmuri11, monospace";
-  ctx.fillStyle = '#e8a020';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#000';
   ctx.fillText(currentLang === 'ko' ? '▼ 가게에 들어가기' : '▼ ENTER SHOP', W/2+1, H-26);
-  ctx.fillStyle = '#e8d050';
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = '#f0d848';
   ctx.fillText(currentLang === 'ko' ? '▼ 가게에 들어가기' : '▼ ENTER SHOP', W/2, H-27);
+  ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
 }
 
@@ -279,13 +393,35 @@ function drawShopkeeper(x, y) {
 
 function drawEggScene() {
   const W = canvas.width, H = canvas.height;
-  // Background - inside shop
-  px(0, 0, W, H, '#2a1f0e');
+  // Background - inside shop (warm interior)
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, H*0.7);
+  wallGrad.addColorStop(0, '#1a1208');
+  wallGrad.addColorStop(1, '#2a1e0c');
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, W, H*0.7);
+  // Wall shelf boards texture
+  ctx.strokeStyle = '#3a2c14'; ctx.lineWidth = 1;
+  for (let wy2 = 0; wy2 < H*0.7; wy2 += 40) {
+    ctx.beginPath(); ctx.moveTo(0, wy2); ctx.lineTo(W, wy2); ctx.stroke();
+  }
+  // Warm ambient glow (ceiling lamp)
+  const intGlow = ctx.createRadialGradient(W/2, 30, 10, W/2, 30, W*0.65);
+  intGlow.addColorStop(0,   'rgba(255,230,160,0.18)');
+  intGlow.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = intGlow;
+  ctx.fillRect(0, 0, W, H*0.7);
   // Floor
-  px(0, H*0.7, W, H*0.3, '#4a3820');
+  px(0, H*0.7, W, H*0.3, '#2e2010');
+  ctx.strokeStyle = '#221808'; ctx.lineWidth = 1;
+  for (let fy = H*0.7; fy < H; fy += 16) {
+    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(W, fy); ctx.stroke();
+  }
   // Counter
-  px(W/2 - 200, H*0.5, 400, 30, C.wood);
-  px(W/2 - 200, H*0.53, 400, 60, C.wood2);
+  px(W/2 - 210, H*0.5-4, 420, 6, '#b07828');  // counter top trim
+  px(W/2 - 210, H*0.5, 420, 28, C.wood);
+  px(W/2 - 210, H*0.528, 420, 58, C.wood2);
+  // Counter highlight
+  px(W/2 - 210, H*0.5, 420, 3, '#d09040');
   // Shopkeeper behind counter
   drawShopkeeper(W/2 - 60, H*0.2);
 
@@ -416,15 +552,69 @@ let introShown = false;
 
 function drawRoom() {
   const W = canvas.width, H = canvas.height;
-  // Room background
-  px(0, 0, W, H*0.65, '#3a3050'); // wall
-  px(0, H*0.65, W, H*0.35, '#2a2538'); // floor
-  // Wallpaper pattern
-  ctx.strokeStyle = '#4a4060';
+  const wallH = H * 0.65;
+
+  // Wall base
+  px(0, 0, W, wallH, '#2e2544');
+
+  // Wallpaper: subtle diamond grid
+  ctx.strokeStyle = '#3d3460';
   ctx.lineWidth = 1;
-  for (let i = 0; i < W; i += 40) ctx.strokeRect(i, 0, 38, H*0.65);
+  const gw = 36, gh = 36;
+  for (let gy = 0; gy < wallH + gh; gy += gh) {
+    for (let gx = (gy/gh % 2 === 0 ? 0 : gw/2); gx < W + gw; gx += gw) {
+      ctx.beginPath();
+      ctx.moveTo(gx, gy - gh/2);
+      ctx.lineTo(gx + gw/2, gy);
+      ctx.lineTo(gx, gy + gh/2);
+      ctx.lineTo(gx - gw/2, gy);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+
+  // Ceiling strip with light fixture
+  px(0, 0, W, 10, '#1e1830');
+  // Ceiling lamp
+  const lampX = W / 2;
+  px(lampX - 6, 0, 12, 14, '#aaa090');    // cord/mount
+  px(lampX - 22, 14, 44, 18, '#e0d8b0');  // shade base
+  px(lampX - 18, 14, 36, 14, '#f0e8c0');  // shade highlight
+
+  // Ambient light cone from lamp
+  const lampGrad = ctx.createRadialGradient(lampX, 22, 10, lampX, 22, W * 0.7);
+  lampGrad.addColorStop(0,   'rgba(255,240,180,0.13)');
+  lampGrad.addColorStop(0.5, 'rgba(240,200,120,0.05)');
+  lampGrad.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = lampGrad;
+  ctx.fillRect(0, 0, W, wallH);
+
+  // Floor: wood planks
+  px(0, wallH, W, H * 0.35, '#1e1a14');
+  ctx.strokeStyle = '#2c2218';
+  ctx.lineWidth = 1;
+  for (let fy = wallH; fy < H; fy += 18) {
+    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(W, fy); ctx.stroke();
+  }
+  // Plank vertical breaks (staggered)
+  ctx.strokeStyle = '#26200a';
+  for (let row = 0; row < 8; row++) {
+    const fy = wallH + row * 18;
+    const off = row % 2 === 0 ? 0 : 60;
+    for (let fx = off; fx < W; fx += 120) {
+      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx, fy + 18); ctx.stroke();
+    }
+  }
+  // Floor highlight strip (near wall)
+  const floorShine = ctx.createLinearGradient(0, wallH, 0, wallH + 30);
+  floorShine.addColorStop(0, 'rgba(255,220,140,0.08)');
+  floorShine.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = floorShine;
+  ctx.fillRect(0, wallH, W, 30);
+
   // Baseboard
-  px(0, H*0.65-6, W, 10, '#5a4a70');
+  px(0, wallH - 8, W, 12, '#4a3860');
+  px(0, wallH - 8, W, 3, '#6a5888');
 
   // Enclosure
   if (lizardType === 'crestie') drawCrestieEnclosure(W/2 - 180, H*0.15, W*0.75, H*0.48);
@@ -437,31 +627,68 @@ function drawRoom() {
 }
 
 function drawCrestieEnclosure(x, y, w, h) {
-  // JIF small enclosure - front-open mesh top
-  px(x-6, y-6, w+12, h+12, '#4a3820'); // outer frame shadow
-  px(x, y, w, h, '#e8d8a0'); // walls (cream/beige)
-  // Glass front (slightly tinted)
-  px(x+6, y+6, w-12, h-30, 'rgba(180,220,255,0.15)');
-  ctx.strokeStyle = '#8a7840';
+  // JIF enclosure - outer shadow/glow
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 18;
+  px(x-6, y-6, w+12, h+12, '#3a2c14');
+  ctx.shadowBlur = 0;
+
+  // Walls (warm cream)
+  px(x, y, w, h, '#ddd090');
+  // Inner subtle gradient (depth illusion)
+  const encGrad = ctx.createLinearGradient(x, y, x+w, y);
+  encGrad.addColorStop(0,   'rgba(0,0,0,0.12)');
+  encGrad.addColorStop(0.15,'rgba(0,0,0,0)');
+  encGrad.addColorStop(0.85,'rgba(0,0,0,0)');
+  encGrad.addColorStop(1,   'rgba(0,0,0,0.10)');
+  ctx.fillStyle = encGrad;
+  ctx.fillRect(x, y, w, h);
+
+  // Glass front panel
+  ctx.fillStyle = 'rgba(160,210,245,0.08)';
+  ctx.fillRect(x+6, y+20, w-12, h-50);
+  // Glass reflections
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fillRect(x+12, y+22, 14, h-60);
+  ctx.fillRect(x+30, y+22, 5, h-60);
+
+  // Frame border
+  ctx.strokeStyle = '#786030';
   ctx.lineWidth = 3;
   ctx.strokeRect(x, y, w, h);
-  // Mesh top
-  px(x, y, w, 20, '#aaa');
-  ctx.strokeStyle = '#888';
+  ctx.strokeStyle = '#a08848';
   ctx.lineWidth = 1;
-  for (let i = 0; i < w; i += 8) ctx.strokeRect(x+i, y, 6, 20);
-  // Label
-  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
-  ctx.fillStyle = '#5a4820';
-  ctx.fillText('JIF ENCLOSURE', x+10, y+h-8);
-  // Substrate (coco fiber - dark brown)
-  px(x+6, y+h-50, w-12, 44, '#5a3820');
-  // Cozy egg hide
+  ctx.strokeRect(x+3, y+3, w-6, h-6);
+
+  // Mesh top
+  px(x, y, w, 22, '#b8b8b8');
+  px(x, y, w, 3, '#d0d0d0');
+  ctx.strokeStyle = '#909090';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < w; i += 7) ctx.strokeRect(x+i, y, 5, 22);
+  for (let j = 0; j < 22; j += 7) {
+    ctx.beginPath(); ctx.moveTo(x, y+j); ctx.lineTo(x+w, y+j); ctx.stroke();
+  }
+
+  // Label (engraved look)
+  ctx.font = "6px 'Press Start 2P', Galmuri11, monospace";
+  ctx.fillStyle = '#8a7030';
+  ctx.fillText('JIF ENCLOSURE', x+12, y+h-7);
+
+  // Substrate (coco fiber texture)
+  px(x+6, y+h-52, w-12, 46, '#4a2e14');
+  ctx.fillStyle = '#583418';
+  for (let si = 0; si < 30; si++) {
+    const sx2 = x+8 + (si*37)%(w-16), sy2 = y+h-50 + (si*19)%40;
+    ctx.fillRect(sx2, sy2, 3+(si%3), 2);
+  }
+  // Substrate highlight
+  px(x+6, y+h-52, w-12, 3, '#6a4228');
+
+  // Decor & lizard
   drawCrestieHide(x + 20, y + h - 95, false);
-  drawCrestieHide(x + w - 110, y + h - 80, true); // backup hide
-  // Plants/decor
+  drawCrestieHide(x + w - 110, y + h - 80, true);
   drawLeaf(x+w-50, y+h-90);
-  // Lizard
   if (gs.bornAnim) drawCrestie(x+w/2-20, y+h-90, { ...lizardAnim, sleeping: gs.isSleeping });
 }
 
@@ -602,26 +829,62 @@ function drawCrestie(x, y, anim) {
 }
 
 function drawBluetongueEnclosure(x, y, w, h) {
-  // 3 size Formax enclosure
-  px(x-6, y-6, w+12, h+12, '#303030');
-  px(x, y, w, h, '#e0e0c8'); // formax white walls
-  ctx.strokeStyle = '#404040';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(x, y, w, h);
+  // 3-size Formax enclosure - shadow
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 18;
+  px(x-6, y-6, w+12, h+12, '#202020');
+  ctx.shadowBlur = 0;
+
+  // White formax walls
+  px(x, y, w, h, '#dcdcc4');
+  // Side depth gradient
+  const fGrad = ctx.createLinearGradient(x, y, x+w, y);
+  fGrad.addColorStop(0,   'rgba(0,0,0,0.10)');
+  fGrad.addColorStop(0.1, 'rgba(0,0,0,0)');
+  fGrad.addColorStop(0.9, 'rgba(0,0,0,0)');
+  fGrad.addColorStop(1,   'rgba(0,0,0,0.08)');
+  ctx.fillStyle = fGrad;
+  ctx.fillRect(x, y, w, h);
+
   // Sliding glass panels
-  px(x+6, y+6, (w-12)/2-2, h-30, 'rgba(180,220,255,0.12)');
-  px(x+(w-12)/2+8, y+6, (w-12)/2-2, h-30, 'rgba(180,220,255,0.12)');
-  ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2;
-  ctx.strokeRect(x+6, y+6, (w-12)/2-2, h-30);
-  ctx.strokeRect(x+(w-12)/2+8, y+6, (w-12)/2-2, h-30);
-  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace"; ctx.fillStyle = '#303030';
-  ctx.fillText('3-SIZE FORMAX', x+10, y+h-8);
-  // Substrate (newspaper/paper)
-  px(x+6, y+h-55, w-12, 49, '#f0e8c0');
-  // Hide (rock cave)
+  const gw2 = (w-14)/2 - 2;
+  ctx.fillStyle = 'rgba(160,210,245,0.09)';
+  ctx.fillRect(x+6, y+6, gw2, h-30);
+  ctx.fillRect(x+gw2+10, y+6, gw2, h-30);
+  // Glass reflections
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(x+10, y+8, 10, h-36);
+  ctx.fillRect(x+gw2+14, y+8, 10, h-36);
+  // Glass borders
+  ctx.strokeStyle = '#b0b0b0'; ctx.lineWidth = 2;
+  ctx.strokeRect(x+6, y+6, gw2, h-30);
+  ctx.strokeRect(x+gw2+10, y+6, gw2, h-30);
+  // Center rail divider
+  px(x+gw2+6, y+6, 4, h-30, '#888');
+
+  // Frame border
+  ctx.strokeStyle = '#303030'; ctx.lineWidth = 4;
+  ctx.strokeRect(x, y, w, h);
+  ctx.strokeStyle = '#505050'; ctx.lineWidth = 1;
+  ctx.strokeRect(x+3, y+3, w-6, h-6);
+
+  // Label
+  ctx.font = "6px 'Press Start 2P', Galmuri11, monospace";
+  ctx.fillStyle = '#404040';
+  ctx.fillText('3-SIZE FORMAX', x+12, y+h-7);
+
+  // Substrate (paper/newspaper texture)
+  px(x+6, y+h-56, w-12, 50, '#e8e0b0');
+  ctx.fillStyle = '#d8d098';
+  for (let si = 0; si < 12; si++) {
+    ctx.fillRect(x+8 + si * ((w-16)/12), y+h-50, (w-16)/12 - 1, 1);
+    ctx.fillRect(x+8 + si * ((w-16)/12), y+h-38, (w-16)/12 - 1, 1);
+  }
+  px(x+6, y+h-56, w-12, 3, '#f0e8c0');
+
+  // Decor & lizard
   drawBluetongueHide(x+20, y+h-100);
   drawLeaf(x+w-60, y+h-100);
-  // Lizard
   if (gs.bornAnim) drawBluetongue(x+w/2-30, y+h-95, { ...lizardAnim, sleeping: gs.isSleeping });
 }
 
@@ -791,14 +1054,18 @@ function drawUI() {
   // Update water button label based on type
   const wBtn = document.getElementById('btn-water');
   if (wBtn) wBtn.textContent = t(lizardType === 'bluetongue' ? 'water_btn_bt' : 'water_btn');
-  // Date
+  // Date & time
   const gd = getGameDate();
   document.getElementById('date-display').textContent = formatDate(gd);
+  updateTimeDisplay();
   // Age stage
   const ageEl = document.getElementById('age-label');
   if (gs.isAdult) ageEl.textContent = t('age_adult');
   else if (gs.gameDaysPassed > 180) ageEl.textContent = t('age_juvenile');
   else ageEl.textContent = t('age_baby');
+  // Weight
+  const wUnit = lizardType === 'crestie' ? 'g' : 'g';
+  document.getElementById('weight-label').textContent = `${t('weight_label')}: ${gs.weight.toFixed(1)}${wUnit}`;
   // Lizard name
   document.getElementById('lizard-name-label').textContent = lizardName || '???';
 
@@ -848,9 +1115,7 @@ function doFeed() {
   gs.lastFedGameDay = currentDay;
   gs.hunger = Math.min(100, gs.hunger + 40);
   gs.happy = Math.min(100, gs.happy + 10);
-  // Growth
-  if (lizardType === 'crestie') gs.weight = Math.min(50, gs.weight + 0.3);
-  else gs.weight = Math.min(600, gs.weight + 4);
+  gs.weight = Math.min(600, gs.weight + 4);
   showMsg(t('feed_ok'));
   saveGame();
 }
@@ -974,6 +1239,7 @@ window.addEventListener('load', () => {
   // Update date display if in room
   if (scene === SCENE.ROOM && gs) {
     document.getElementById('date-display').style.display = 'block';
+    updateTimeDisplay();
     if (gs.bornAnim) document.getElementById('ui-overlay').style.display = 'flex';
   }
 
@@ -997,6 +1263,9 @@ window.addEventListener('load', () => {
 
   requestAnimationFrame(gameLoop);
 
+  // 1초마다 게임 내 시계 업데이트
+  setInterval(updateTimeDisplay, 1000);
+
   // Setinterval to update date display + sleepy/thirsty/hungry message
   let lastSleepyMsgTime = 0;
   let lastThirstyMsgTime = 0;
@@ -1006,6 +1275,7 @@ window.addEventListener('load', () => {
       updateGameTime();
       const gd = getGameDate();
       document.getElementById('date-display').textContent = formatDate(gd);
+      updateTimeDisplay();
       const now = Date.now();
       // Show sleepy message periodically at night (every 60s)
       if (gs.bornAnim && !gs.isSleeping && isSleepyHour()) {
@@ -1092,6 +1362,7 @@ function confirmName() {
   gs.scene = SCENE.ROOM;
   saveGame();
   document.getElementById('date-display').style.display = 'block';
+  updateTimeDisplay();
 }
 
 // ─── FARM PIXEL ART ───────────────────────────────────────────────────────────
@@ -1306,8 +1577,10 @@ function openFarm() {
   currentFarmTab = 'cricket';
   document.getElementById('farm-cricket-panel').style.display = '';
   document.getElementById('farm-chicory-panel').style.display = 'none';
+  document.getElementById('farm-cgestie-panel').style.display = 'none';
   document.getElementById('tab-btn-cricket').className = 'tab-btn active';
   document.getElementById('tab-btn-chicory').className = 'tab-btn';
+  document.getElementById('tab-btn-cgestie').className = 'tab-btn';
   updateFarmUI();
 }
 
@@ -1319,8 +1592,10 @@ function switchFarmTab(tab) {
   currentFarmTab = tab;
   document.getElementById('farm-cricket-panel').style.display = tab === 'cricket' ? '' : 'none';
   document.getElementById('farm-chicory-panel').style.display = tab === 'chicory' ? '' : 'none';
+  document.getElementById('farm-cgestie-panel').style.display = tab === 'cgestie' ? '' : 'none';
   document.getElementById('tab-btn-cricket').className = 'tab-btn' + (tab === 'cricket' ? ' active' : '');
   document.getElementById('tab-btn-chicory').className = 'tab-btn' + (tab === 'chicory' ? ' active' : '');
+  document.getElementById('tab-btn-cgestie').className = 'tab-btn' + (tab === 'cgestie' ? ' active' : '');
   drawFarmCricketCanvas();
   drawFarmChicoryCanvas();
 }
@@ -1329,6 +1604,7 @@ function updateFarmUI() {
   document.getElementById('farm-title').textContent = t('farm_title');
   document.getElementById('tab-btn-cricket').textContent = t('farm_tab_cricket');
   document.getElementById('tab-btn-chicory').textContent = t('farm_tab_chicory');
+  document.getElementById('tab-btn-cgestie').textContent = t('farm_tab_cgestie');
   document.getElementById('lbl-cricket-count').textContent = t('cricket_count_label');
   document.getElementById('lbl-chicory-stage').textContent = t('chicory_stage_label');
   document.getElementById('btn-cricket-get').textContent = t('cricket_get_btn');
@@ -1341,6 +1617,9 @@ function updateFarmUI() {
   document.getElementById('btn-pellet-get').textContent = t('pellet_get_btn');
   document.getElementById('btn-cricket-care').textContent = t('cricket_care_btn');
   document.getElementById('lbl-chicory-stock').textContent = t('chicory_stock_label');
+  document.getElementById('lbl-cgestie-food').textContent = t('cgestie_food_label');
+  document.getElementById('btn-cgestie-food-get').textContent = t('cgestie_food_get_btn');
+  document.getElementById('btn-cgestie-feed-lizard').textContent = t('cgestie_feed_lizard_btn');
   // Cricket stats
   const count = gs ? (gs.cricketCount || 0) : 0;
   document.getElementById('bar-cricket').style.width = (count / 150 * 100) + '%';
@@ -1373,6 +1652,11 @@ function updateFarmUI() {
   document.getElementById('btn-chicory-water').disabled = chicState !== 'growing';
   document.getElementById('btn-chicory-harvest').disabled = chicState !== 'ready';
   document.getElementById('btn-chicory-feed-lizard').disabled = chicStock < 1;
+  // Cgestie food stats
+  const cgestieFood = gs ? (gs.cgestieFoodCount || 0) : 0;
+  document.getElementById('bar-cgestie-food').style.width = (cgestieFood / 10 * 100) + '%';
+  document.getElementById('cgestie-food-count-text').textContent = cgestieFood + ' / 10';
+  document.getElementById('btn-cgestie-feed-lizard').disabled = cgestieFood < 1;
   drawFarmCricketCanvas();
   drawFarmChicoryCanvas();
 }
@@ -1461,16 +1745,43 @@ function doPelletGet() {
   updateFarmUI();
 }
 
+function doCgestieFoodGet() {
+  if (!gs) return;
+  if ((gs.cgestieFoodCount || 0) >= 10) { showMsg(t('cgestie_food_get_max')); return; }
+  gs.cgestieFoodCount = Math.min(10, (gs.cgestieFoodCount || 0) + 3);
+  showMsg(t('cgestie_food_get_ok'));
+  saveGame();
+  updateFarmUI();
+}
+
+function doCgestieFeedLizard() {
+  if (!gs || !gs.bornAnim) return;
+  if (lizardType !== 'crestie') { showMsg(t('cgestie_food_bt_no')); return; }
+  if ((gs.cgestieFoodCount || 0) < 1) { showMsg(t('cgestie_food_none')); return; }
+  if (gs.gameDaysPassed - gs.lastFedGameDay < 2) { showMsg(t('cricket_feed_no')); return; }
+  gs.cgestieFoodCount -= 1;
+  gs.lastFedGameDay = gs.gameDaysPassed;
+  gs.hunger = Math.min(100, gs.hunger + 45);
+  gs.happy = Math.min(100, gs.happy + 12);
+  gs.weight = Math.min(50, gs.weight + 0.5);
+  showMsg(t('cgestie_food_feed_ok'));
+  saveGame();
+  closeFarm();
+}
+
 function doCricketCare() {
   if (!gs) return;
   if ((gs.cricketCount || 0) === 0) { showMsg(t('cricket_care_none')); return; }
-  if ((gs.chicoryStock || 0) < 1) { showMsg(t('cricket_care_no_chicory')); return; }
-  if ((gs.pelletCount || 0) < 1) { showMsg(t('cricket_care_no_pellet')); return; }
+  if ((gs.pelletCount || 0) < 1 && (gs.chicoryStock || 0) < 1) { showMsg(t('cricket_care_no_food')); return; }
   if (gs.lastCricketCareDay === gs.gameDaysPassed) { showMsg(t('cricket_care_already')); return; }
-  gs.chicoryStock -= 1;
-  gs.pelletCount -= 1;
+  if ((gs.pelletCount || 0) >= 1) {
+    gs.pelletCount -= 1;
+    showMsg(t('cricket_care_ok'));
+  } else {
+    gs.chicoryStock -= 1;
+    showMsg(t('cricket_care_ok_chicory'));
+  }
   gs.lastCricketCareDay = gs.gameDaysPassed;
-  showMsg(t('cricket_care_ok'));
   saveGame();
   updateFarmUI();
 }
