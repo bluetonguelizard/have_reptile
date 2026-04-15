@@ -48,6 +48,13 @@ function newGameState(type) {
     bornAnim: false,
     shopEnterAnim: true,
     introShown: false,
+    isSleeping: false,
+    cricketCount: 0,
+    lastCricketBreedDay: 0,
+    chicoryState: 'none',     // 'none' | 'growing' | 'ready'
+    chicoryPlantedDay: 0,
+    chicoryWateredDays: 0,
+    chicoryLastWateredDay: -1,
   };
 }
 
@@ -72,6 +79,10 @@ function saveGame() {
   }
 }
 
+// ─── SLEEP HELPERS ───────────────────────────────────────────────────────────
+function isSleepyHour() { const h = new Date().getHours(); return h >= 21; }
+function isWakeHour()   { const h = new Date().getHours(); return h >= 7 && h < 21; }
+
 // ─── TIME ───────────────────────────────────────────────────────────────────
 function updateGameTime() {
   if (!gs) return;
@@ -90,7 +101,20 @@ function updateGameTime() {
     if (!gs.isAdult && gs.gameDaysPassed >= ADULT_GAME_DAYS) {
       gs.isAdult = true;
     }
+    // Cricket auto-breeding every 3 game days
+    if ((gs.cricketCount || 0) > 0) {
+      const breedCycles = Math.floor((gs.gameDaysPassed - (gs.lastCricketBreedDay || 0)) / 3);
+      if (breedCycles > 0) {
+        gs.cricketCount = Math.min(150, Math.round(gs.cricketCount * Math.pow(1.25, breedCycles)));
+        gs.lastCricketBreedDay = (gs.lastCricketBreedDay || 0) + breedCycles * 3;
+      }
+    }
     saveGame();
+  }
+  // Chicory growth check (runs every tick)
+  if (gs.chicoryState === 'growing') {
+    const growthDays = (gs.gameDaysPassed - (gs.chicoryPlantedDay || 0)) + (gs.chicoryWateredDays || 0);
+    if (growthDays >= 5) gs.chicoryState = 'ready';
   }
 }
 
@@ -132,6 +156,23 @@ function drawText(text, x, y, size, color, align='left') {
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
   ctx.textAlign = 'left';
+}
+
+function drawZzz(x, y) {
+  const s = 3;
+  // small z
+  ctx.fillStyle = '#8888cc';
+  ctx.fillRect(x,      y,      3*s, s  );
+  ctx.fillRect(x+2*s,  y+s,    s,   s  );
+  ctx.fillRect(x+s,    y+2*s,  s,   s  );
+  ctx.fillRect(x,      y+3*s,  3*s, s  );
+  // medium Z (offset up-right)
+  ctx.fillStyle = '#aaaaee';
+  const zx = x + 4*s, zy = y - 5*s;
+  ctx.fillRect(zx,       zy,       4*s, s  );
+  ctx.fillRect(zx+3*s,   zy+s,     s,   s  );
+  ctx.fillRect(zx+s,     zy+2*s,   s,   s  );
+  ctx.fillRect(zx,       zy+3*s,   4*s, s  );
 }
 
 // ─── DRAW SCENES ─────────────────────────────────────────────────────────────
@@ -409,7 +450,7 @@ function drawCrestieEnclosure(x, y, w, h) {
   // Plants/decor
   drawLeaf(x+w-50, y+h-90);
   // Lizard
-  if (gs.bornAnim) drawCrestie(x+w/2-20, y+h-90, lizardAnim);
+  if (gs.bornAnim) drawCrestie(x+w/2-20, y+h-90, { ...lizardAnim, sleeping: gs.isSleeping });
 }
 
 function drawCrestieHide(x, y, small) {
@@ -433,9 +474,6 @@ function drawCrestieHide(x, y, small) {
   ctx.arc(35, 50, 20, Math.PI, 0);
   ctx.lineTo(55, 55); ctx.lineTo(15, 55);
   ctx.closePath(); ctx.fill();
-  // Label
-  ctx.font = "5px 'Press Start 2P', Galmuri11, monospace"; ctx.fillStyle = '#e8d0a0';
-  ctx.fillText('COZY', 22, 30);
   ctx.restore();
 }
 
@@ -526,7 +564,7 @@ function drawCrestie(x, y, anim) {
   ctx.fillRect(x+5*s,  y+13*s, s,   s  );
 
   // MOUTH
-  if (threatening) {
+  if (!anim.sleeping && threatening) {
     ctx.fillStyle = '#ff2020';
     ctx.fillRect(x+13*s, y+8*s,  8*s, 3*s);  // wide gape
     ctx.fillStyle = '#ffff80';
@@ -538,6 +576,16 @@ function drawCrestie(x, y, anim) {
   } else {
     ctx.fillStyle = '#b05010';
     ctx.fillRect(x+13*s, y+9*s,  7*s, s  );  // closed mouth line
+  }
+
+  // SLEEPING — override eyes, draw Zzz
+  if (anim.sleeping) {
+    // closed eyes (horizontal line)
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(x+13*s, y+4*s, 3*s, s);
+    ctx.fillRect(x+13*s, y+5*s, s, s);
+    ctx.fillRect(x+15*s, y+5*s, s, s);
+    drawZzz(x + 20*s, y - s*2);
   }
 }
 
@@ -562,7 +610,7 @@ function drawBluetongueEnclosure(x, y, w, h) {
   drawBluetongueHide(x+20, y+h-100);
   drawLeaf(x+w-60, y+h-100);
   // Lizard
-  if (gs.bornAnim) drawBluetongue(x+w/2-30, y+h-95, lizardAnim);
+  if (gs.bornAnim) drawBluetongue(x+w/2-30, y+h-95, { ...lizardAnim, sleeping: gs.isSleeping });
 }
 
 function drawBluetongueHide(x, y) {
@@ -650,7 +698,7 @@ function drawBluetongue(x, y, anim) {
   ctx.fillRect(x+2*s,  y+12*s, 5*s, s  );
 
   // MOUTH + TONGUE
-  if (threatening) {
+  if (!anim.sleeping && threatening) {
     ctx.fillStyle = '#c83020';
     ctx.fillRect(x+18*s, y+10*s, 10*s, 4*s);  // wide open gape
     // BLUE TONGUE — the signature feature
@@ -666,6 +714,16 @@ function drawBluetongue(x, y, anim) {
   } else {
     ctx.fillStyle = '#907040';
     ctx.fillRect(x+19*s, y+11*s, 8*s, s  );   // closed mouth line
+  }
+
+  // SLEEPING — override eyes, draw Zzz
+  if (anim.sleeping) {
+    // closed eyes
+    ctx.fillStyle = '#1a1000';
+    ctx.fillRect(x+20*s, y+5*s, 3*s, s);
+    ctx.fillRect(x+20*s, y+6*s, s, s);
+    ctx.fillRect(x+22*s, y+6*s, s, s);
+    drawZzz(x + 28*s, y - s);
   }
 }
 
@@ -727,6 +785,17 @@ function drawUI() {
   else ageEl.textContent = t('age_baby');
   // Lizard name
   document.getElementById('lizard-name-label').textContent = lizardName || '???';
+
+  // Sleep button visibility
+  const sleepBtn = document.getElementById('btn-sleep');
+  const actionBtns = ['btn-handle', 'btn-feed', 'btn-water'];
+  if (gs.isSleeping) {
+    actionBtns.forEach(id => { document.getElementById(id).style.display = 'none'; });
+    sleepBtn.style.display = 'none';
+  } else {
+    actionBtns.forEach(id => { document.getElementById(id).style.display = ''; });
+    sleepBtn.style.display = isSleepyHour() ? '' : 'none';
+  }
 }
 
 function showMsg(text, duration=2500) {
@@ -798,6 +867,13 @@ function doStatus() {
   showMsg(lines.join('\n'), 5000);
 }
 
+function doSleep() {
+  if (!gs || !gs.bornAnim) return;
+  gs.isSleeping = true;
+  showMsg(t('sleeping_msg'), 3000);
+  saveGame();
+}
+
 // ─── MAIN LOOP ───────────────────────────────────────────────────────────────
 let lastTime = 0;
 function gameLoop(ts) {
@@ -842,6 +918,13 @@ function gameLoop(ts) {
       showMsg(t('adult_msg'), 5000);
       saveGame();
     }
+    // Auto-wake in the morning
+    if (gs.isSleeping && isWakeHour()) {
+      gs.isSleeping = false;
+      gs.bond = Math.min(100, gs.bond + 1);
+      showMsg(t('wake_msg'), 3500);
+      saveGame();
+    }
     drawUI();
   }
 }
@@ -873,7 +956,6 @@ window.addEventListener('load', () => {
   // Update date display if in room
   if (scene === SCENE.ROOM && gs) {
     document.getElementById('date-display').style.display = 'block';
-    document.getElementById('btn-nav-reselect').style.display = 'inline-block';
     if (gs.bornAnim) document.getElementById('ui-overlay').style.display = 'flex';
   }
 
@@ -897,12 +979,21 @@ window.addEventListener('load', () => {
 
   requestAnimationFrame(gameLoop);
 
-  // Setinterval to update date display
+  // Setinterval to update date display + sleepy message
+  let lastSleepyMsgTime = 0;
   setInterval(() => {
     if (scene === SCENE.ROOM && gs) {
       updateGameTime();
       const gd = getGameDate();
       document.getElementById('date-display').textContent = formatDate(gd);
+      // Show sleepy message periodically at night (every 60s)
+      if (gs.bornAnim && !gs.isSleeping && isSleepyHour()) {
+        const now = Date.now();
+        if (now - lastSleepyMsgTime > 60000) {
+          lastSleepyMsgTime = now;
+          showMsg(t('sleepy_msg'), 4000);
+        }
+      }
     }
   }, 5000);
 });
@@ -967,5 +1058,334 @@ function confirmName() {
   gs.scene = SCENE.ROOM;
   saveGame();
   document.getElementById('date-display').style.display = 'block';
-  document.getElementById('btn-nav-reselect').style.display = 'inline-block';
+}
+
+// ─── FARM PIXEL ART ───────────────────────────────────────────────────────────
+function drawPixelCricket(c, x, y) {
+  const s = 2;
+  // Body
+  c.fillStyle = '#5a4010';
+  c.fillRect(x, y, 10*s, 4*s);
+  // Wing sheen
+  c.fillStyle = '#7a5820';
+  c.fillRect(x+s, y, 8*s, 2*s);
+  // Head
+  c.fillStyle = '#4a3008';
+  c.fillRect(x+7*s, y-s, 4*s, 3*s);
+  // Eye
+  c.fillStyle = '#cc3300';
+  c.fillRect(x+8*s, y-s, s, s);
+  // Antennae
+  c.fillStyle = '#7a6030';
+  c.fillRect(x+8*s, y-3*s, s, 2*s);
+  c.fillRect(x+7*s, y-4*s, 2*s, s);
+  c.fillRect(x+10*s, y-3*s, s, 2*s);
+  c.fillRect(x+9*s, y-4*s, 2*s, s);
+  // Legs
+  c.fillStyle = '#3a2808';
+  c.fillRect(x+2*s, y+4*s, s, 3*s);
+  c.fillRect(x+5*s, y+4*s, s, 3*s);
+  c.fillRect(x+8*s, y+4*s, s, 2*s);
+  // Hind jump legs
+  c.fillStyle = '#4a3810';
+  c.fillRect(x, y+3*s, s, 4*s);
+  c.fillRect(x-s, y+6*s, 3*s, s);
+}
+
+function drawFarmCricketCanvas() {
+  const el = document.getElementById('farm-cricket-canvas');
+  if (!el) return;
+  const c = el.getContext('2d');
+  const W = el.width, H = el.height;
+  c.clearRect(0, 0, W, H);
+  // Background
+  c.fillStyle = '#0a140a';
+  c.fillRect(0, 0, W, H);
+  // Enclosure border
+  c.strokeStyle = '#2a5a2a';
+  c.lineWidth = 3;
+  c.strokeRect(3, 3, W-6, H-6);
+  // Egg-carton hides at back
+  c.fillStyle = '#8a6040';
+  for (let i = 0; i < 5; i++) {
+    c.fillRect(8 + i*60, H-32, 50, 18);
+    c.fillStyle = '#6a4828';
+    c.fillRect(8 + i*60, H-32, 50, 4);
+    c.fillStyle = '#8a6040';
+  }
+  // Soil floor
+  c.fillStyle = '#3a2a18';
+  c.fillRect(6, H-18, W-12, 12);
+  c.fillStyle = '#4a3820';
+  c.fillRect(6, H-20, W-12, 4);
+
+  const count = gs ? (gs.cricketCount || 0) : 0;
+  const displayCount = Math.min(count, 18);
+  for (let i = 0; i < displayCount; i++) {
+    const col = i % 6;
+    const row = Math.floor(i / 6);
+    const bx = 18 + col * 50 + (row % 2) * 10;
+    const by = H - 38 - row * 16;
+    drawPixelCricket(c, bx, by);
+  }
+  if (count === 0) {
+    c.fillStyle = '#555';
+    c.font = "7px 'Press Start 2P', monospace";
+    c.textAlign = 'center';
+    c.fillText(currentLang === 'ko' ? '비어있음' : 'empty', W/2, H/2 + 4);
+    c.textAlign = 'left';
+  }
+}
+
+function drawChicorySprout(c, cx, groundY) {
+  const s = 2;
+  c.fillStyle = '#4a7a30';
+  c.fillRect(cx-s, groundY-8*s, 2*s, 8*s);
+  c.fillStyle = '#5a9a40';
+  c.fillRect(cx-5*s, groundY-6*s, 4*s, 2*s);
+  c.fillRect(cx+s, groundY-5*s, 4*s, 2*s);
+}
+
+function drawChicorySmall(c, cx, groundY) {
+  const s = 2;
+  c.fillStyle = '#4a7a30';
+  c.fillRect(cx-s, groundY-13*s, 2*s, 13*s);
+  c.fillStyle = '#5a9a40';
+  c.fillRect(cx-8*s, groundY-10*s, 7*s, 2*s);
+  c.fillRect(cx+s, groundY-12*s, 7*s, 2*s);
+  c.fillRect(cx-6*s, groundY-7*s, 5*s, 2*s);
+  c.fillRect(cx+s, groundY-8*s, 5*s, 2*s);
+  c.fillStyle = '#3a6a20';
+  c.fillRect(cx-4*s, groundY-10*s, s, s);
+  c.fillRect(cx+3*s, groundY-12*s, s, s);
+}
+
+function drawChicoryMedium(c, cx, groundY) {
+  const s = 2;
+  c.fillStyle = '#4a7a30';
+  c.fillRect(cx-s, groundY-19*s, 2*s, 19*s);
+  c.fillRect(cx-9*s, groundY-15*s, 9*s, s);
+  c.fillRect(cx+s, groundY-13*s, 9*s, s);
+  c.fillStyle = '#5a9a40';
+  c.fillRect(cx-12*s, groundY-9*s, 10*s, 3*s);
+  c.fillRect(cx+2*s, groundY-7*s, 10*s, 3*s);
+  c.fillRect(cx-10*s, groundY-5*s, 8*s, 3*s);
+  // Budding flowers (light blue)
+  c.fillStyle = '#8ab0e0';
+  c.fillRect(cx-2*s, groundY-22*s, 4*s, 3*s);
+  c.fillRect(cx-9*s, groundY-17*s, 3*s, 3*s);
+}
+
+function drawChicoryFull(c, cx, groundY) {
+  const s = 2;
+  // Stems & branches
+  c.fillStyle = '#4a7a30';
+  c.fillRect(cx-s, groundY-24*s, 2*s, 24*s);
+  c.fillRect(cx-10*s, groundY-19*s, 10*s, s);
+  c.fillRect(cx+s, groundY-17*s, 10*s, s);
+  c.fillRect(cx-8*s, groundY-15*s, 7*s, s);
+  // Large leaves
+  c.fillStyle = '#5a9a40';
+  c.fillRect(cx-14*s, groundY-10*s, 12*s, 3*s);
+  c.fillRect(cx+2*s, groundY-8*s, 12*s, 3*s);
+  c.fillRect(cx-12*s, groundY-5*s, 10*s, 3*s);
+  c.fillRect(cx+2*s, groundY-12*s, 10*s, 3*s);
+  c.fillStyle = '#3a6a20';
+  c.fillRect(cx-8*s, groundY-10*s, s, s);
+  c.fillRect(cx+7*s, groundY-8*s, s, s);
+  // Blue chicory flowers (signature color!)
+  c.fillStyle = '#4a7ed8';
+  c.fillRect(cx-4*s, groundY-27*s, 8*s, 4*s);
+  c.fillRect(cx-6*s, groundY-25*s, 12*s, 2*s);
+  c.fillStyle = '#6aa0f0';
+  c.fillRect(cx-2*s, groundY-26*s, 4*s, 2*s);
+  c.fillStyle = '#f0e840';
+  c.fillRect(cx-s, groundY-25*s, 2*s, 2*s);
+  // Left branch flower
+  c.fillStyle = '#4a7ed8';
+  c.fillRect(cx-12*s, groundY-21*s, 5*s, 4*s);
+  c.fillStyle = '#f0e840';
+  c.fillRect(cx-11*s, groundY-20*s, 2*s, s);
+  // Right branch flower
+  c.fillStyle = '#4a7ed8';
+  c.fillRect(cx+9*s, groundY-19*s, 5*s, 4*s);
+  c.fillStyle = '#f0e840';
+  c.fillRect(cx+10*s, groundY-18*s, 2*s, s);
+  // Sparkles
+  c.fillStyle = '#ffffff';
+  c.fillRect(cx-2*s, groundY-29*s, s, s);
+  c.fillRect(cx+6*s, groundY-23*s, s, s);
+  c.fillRect(cx-8*s, groundY-16*s, s, s);
+}
+
+function drawFarmChicoryCanvas() {
+  const el = document.getElementById('farm-chicory-canvas');
+  if (!el) return;
+  const c = el.getContext('2d');
+  const W = el.width, H = el.height;
+  c.clearRect(0, 0, W, H);
+  const state = gs ? (gs.chicoryState || 'none') : 'none';
+  const growthDays = gs ? Math.min(5, (gs.gameDaysPassed - (gs.chicoryPlantedDay||0)) + (gs.chicoryWateredDays||0)) : 0;
+  // Sky
+  c.fillStyle = state === 'none' ? '#0a140a' : '#1a2a3a';
+  c.fillRect(0, 0, W, H);
+  if (state !== 'none') {
+    c.fillStyle = '#152840';
+    c.fillRect(0, 0, W, H * 0.55);
+    // Sun
+    c.fillStyle = '#f8f060';
+    c.fillRect(W-32, 8, 14, 14);
+    c.fillStyle = '#f0d840';
+    c.fillRect(W-30, 10, 18, 18);
+    c.fillStyle = '#f8f060';
+    c.fillRect(W-29, 11, 14, 14);
+  }
+  // Soil
+  c.fillStyle = '#5a4030';
+  c.fillRect(0, H-22, W, 22);
+  c.fillStyle = '#7a5a40';
+  c.fillRect(0, H-24, W, 4);
+  c.fillStyle = '#6a4a38';
+  for (let i = 0; i < 7; i++) c.fillRect(10 + i*44, H-20, 14, 4);
+  const cx = W / 2, groundY = H - 22;
+  if (state === 'none') {
+    c.fillStyle = '#555';
+    c.font = "7px 'Press Start 2P', monospace";
+    c.textAlign = 'center';
+    c.fillText(currentLang === 'ko' ? '미심재' : 'not planted', W/2, H/2 + 4);
+    c.textAlign = 'left';
+  } else if (state === 'growing') {
+    if (growthDays <= 1) drawChicorySprout(c, cx, groundY);
+    else if (growthDays <= 3) drawChicorySmall(c, cx, groundY);
+    else drawChicoryMedium(c, cx, groundY);
+  } else if (state === 'ready') {
+    drawChicoryFull(c, cx, groundY);
+  }
+}
+
+// ─── FARM ACTIONS ─────────────────────────────────────────────────────────────
+let currentFarmTab = 'cricket';
+
+function openFarm() {
+  if (!gs || !gs.bornAnim) return;
+  document.getElementById('farm-modal').style.display = 'flex';
+  currentFarmTab = 'cricket';
+  document.getElementById('farm-cricket-panel').style.display = '';
+  document.getElementById('farm-chicory-panel').style.display = 'none';
+  document.getElementById('tab-btn-cricket').className = 'tab-btn active';
+  document.getElementById('tab-btn-chicory').className = 'tab-btn';
+  updateFarmUI();
+}
+
+function closeFarm() {
+  document.getElementById('farm-modal').style.display = 'none';
+}
+
+function switchFarmTab(tab) {
+  currentFarmTab = tab;
+  document.getElementById('farm-cricket-panel').style.display = tab === 'cricket' ? '' : 'none';
+  document.getElementById('farm-chicory-panel').style.display = tab === 'chicory' ? '' : 'none';
+  document.getElementById('tab-btn-cricket').className = 'tab-btn' + (tab === 'cricket' ? ' active' : '');
+  document.getElementById('tab-btn-chicory').className = 'tab-btn' + (tab === 'chicory' ? ' active' : '');
+  drawFarmCricketCanvas();
+  drawFarmChicoryCanvas();
+}
+
+function updateFarmUI() {
+  document.getElementById('farm-title').textContent = t('farm_title');
+  document.getElementById('tab-btn-cricket').textContent = t('farm_tab_cricket');
+  document.getElementById('tab-btn-chicory').textContent = t('farm_tab_chicory');
+  document.getElementById('lbl-cricket-count').textContent = t('cricket_count_label');
+  document.getElementById('lbl-chicory-stage').textContent = t('chicory_stage_label');
+  document.getElementById('btn-cricket-get').textContent = t('cricket_get_btn');
+  document.getElementById('btn-cricket-feed').textContent = t('cricket_feed_btn');
+  document.getElementById('btn-chicory-plant').textContent = t('chicory_plant_btn');
+  document.getElementById('btn-chicory-water').textContent = t('chicory_water_btn');
+  document.getElementById('btn-chicory-harvest').textContent = t('chicory_harvest_btn');
+  // Cricket stats
+  const count = gs ? (gs.cricketCount || 0) : 0;
+  document.getElementById('bar-cricket').style.width = (count / 150 * 100) + '%';
+  document.getElementById('cricket-count-text').textContent = count + ' / 150';
+  document.getElementById('cricket-info').textContent =
+    count > 0 ? (currentLang === 'ko' ? `3일마다 자동 번식 (+25%)` : `Auto-breeds every 3 days (+25%)`) : '';
+  // Chicory stats
+  const chicState = gs ? (gs.chicoryState || 'none') : 'none';
+  const growthDays = gs ? Math.min(5, (gs.gameDaysPassed - (gs.chicoryPlantedDay||0)) + (gs.chicoryWateredDays||0)) : 0;
+  const growthPct = chicState === 'none' ? 0 : (chicState === 'ready' ? 100 : Math.round(growthDays / 5 * 100));
+  document.getElementById('bar-chicory').style.width = growthPct + '%';
+  document.getElementById('chicory-stage-text').textContent =
+    chicState === 'none' ? t('chicory_none_text') :
+    chicState === 'ready' ? t('chicory_ready_text') : t('chicory_growing_text');
+  document.getElementById('chicory-info').textContent =
+    chicState === 'growing' ? t('chicory_info_growing') + ` (${growthDays}/5)` :
+    chicState === 'ready' ? t('chicory_info_ready') : '';
+  // Button enable/disable
+  document.getElementById('btn-chicory-plant').disabled = chicState !== 'none';
+  document.getElementById('btn-chicory-water').disabled = chicState !== 'growing';
+  document.getElementById('btn-chicory-harvest').disabled = chicState !== 'ready';
+  drawFarmCricketCanvas();
+  drawFarmChicoryCanvas();
+}
+
+function doCricketGet() {
+  if (!gs) return;
+  if ((gs.cricketCount || 0) >= 150) { showMsg(t('cricket_get_max')); return; }
+  gs.cricketCount = Math.min(150, (gs.cricketCount || 0) + 20);
+  gs.lastCricketBreedDay = gs.gameDaysPassed;
+  showMsg(t('cricket_get_ok'));
+  saveGame();
+  updateFarmUI();
+}
+
+function doCricketFeed() {
+  if (!gs || !gs.bornAnim) return;
+  if ((gs.cricketCount || 0) < 5) { showMsg(t('cricket_feed_none')); return; }
+  if (gs.gameDaysPassed - gs.lastFedGameDay < 2) { showMsg(t('cricket_feed_no')); return; }
+  gs.cricketCount -= 5;
+  gs.lastFedGameDay = gs.gameDaysPassed;
+  gs.hunger = Math.min(100, gs.hunger + 55);
+  gs.happy = Math.min(100, gs.happy + 12);
+  if (lizardType === 'crestie') gs.weight = Math.min(50, gs.weight + 0.5);
+  else gs.weight = Math.min(600, gs.weight + 6);
+  showMsg(t('cricket_feed_ok'));
+  saveGame();
+  closeFarm();
+}
+
+function doChicoryPlant() {
+  if (!gs) return;
+  if (gs.chicoryState !== 'none') { showMsg(t('chicory_plant_already')); return; }
+  gs.chicoryState = 'growing';
+  gs.chicoryPlantedDay = gs.gameDaysPassed;
+  gs.chicoryWateredDays = 0;
+  gs.chicoryLastWateredDay = -1;
+  showMsg(t('chicory_plant_ok'));
+  saveGame();
+  updateFarmUI();
+}
+
+function doChicoryWater() {
+  if (!gs) return;
+  if (gs.chicoryState === 'none') { showMsg(t('chicory_water_none')); return; }
+  if (gs.chicoryState !== 'growing') { showMsg(t('chicory_harvest_none')); return; }
+  if (gs.chicoryLastWateredDay === gs.gameDaysPassed) { showMsg(t('chicory_water_already')); return; }
+  gs.chicoryWateredDays = (gs.chicoryWateredDays || 0) + 1;
+  gs.chicoryLastWateredDay = gs.gameDaysPassed;
+  const growthDays = (gs.gameDaysPassed - gs.chicoryPlantedDay) + gs.chicoryWateredDays;
+  if (growthDays >= 5) gs.chicoryState = 'ready';
+  showMsg(t('chicory_water_ok'));
+  saveGame();
+  updateFarmUI();
+}
+
+function doChicoryHarvest() {
+  if (!gs) return;
+  if (gs.chicoryState !== 'ready') { showMsg(t('chicory_harvest_none')); return; }
+  gs.chicoryState = 'none';
+  gs.hunger = Math.min(100, gs.hunger + 25);
+  gs.happy = Math.min(100, gs.happy + 20);
+  gs.hydration = Math.min(100, (gs.hydration || 0) + 15);
+  showMsg(t('chicory_harvest_ok'));
+  saveGame();
+  closeFarm();
 }

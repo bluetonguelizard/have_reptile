@@ -271,7 +271,8 @@ canvas {
   .modal-panel p { font-size: 7px; }
 
   /* Pixel input easier to tap */
-  .pixel-input { font-size: 9px; padding: 12px 10px; }
+  /* font-size must be >= 16px on mobile to prevent iOS Safari auto-zoom on focus */
+  .pixel-input { font-size: 16px; padding: 12px 10px; }
 
   /* Name/age label wrap */
   #lizard-name-label { font-size: 8px !important; }
@@ -282,4 +283,81 @@ canvas {
   .pixel-btn.small { font-size: 6px; padding: 9px 5px; }
   .stat-bar { width: 40px; }
   #msg-box { font-size: 7px; }
+}
+
+/* ─── FARM MODAL ─────────────────────────────────────────────────────────── */
+#farm-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.farm-panel {
+  max-width: 440px;
+  width: 92%;
+  padding: 20px 18px;
+}
+
+.farm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.farm-header h2 {
+  margin: 0;
+  font-size: 10px;
+  color: #e8a020;
+}
+
+.farm-canvas-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+  background: #0a140a;
+  border: 3px solid #2a4a2a;
+}
+.farm-canvas-wrap canvas {
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+.farm-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stat-fill.cricket { background: #8a6020; }
+.stat-fill.chicory  { background: #4a9a3a; }
+.stat-bar.wide { width: 110px; }
+
+.farm-info {
+  font-size: 7px;
+  color: #aaa;
+  text-align: center;
+  margin-bottom: 10px;
+  line-height: 1.8;
+  min-height: 13px;
+}
+
+.farm-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .farm-panel { padding: 14px 12px; }
+  .farm-header h2 { font-size: 9px; }
+  .stat-bar.wide { width: 80px; }
 }

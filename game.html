@@ -19,7 +19,6 @@
 
 <div id="game-nav">
   <button class="pixel-btn small" id="btn-nav-home" onclick="doGoHome()">홈</button>
-  <button class="pixel-btn small" id="btn-nav-reselect" onclick="doReselect()" style="background:#8a5a1a;color:#f0d080;display:none">다시 선택</button>
   <button class="pixel-btn small red" id="btn-nav-logout" onclick="doLogout()">로그아웃</button>
 </div>
 
@@ -56,20 +55,57 @@
       <button class="pixel-btn small blue" id="btn-feed" onclick="doFeed()"></button>
       <button class="pixel-btn small" id="btn-water" onclick="doWater()" style="background:#4abfe8;color:#fff"></button>
       <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
+      <button class="pixel-btn small" id="btn-sleep" onclick="doSleep()" style="display:none;background:#1e1550;color:#aaaaee"></button>
+      <button class="pixel-btn small" id="btn-farm" onclick="openFarm()" style="background:#3a7a3a;color:#c8f0c8"></button>
     </div>
   </div>
 
   <!-- Message box -->
   <div id="msg-box"></div>
 
-  <!-- Reselect confirm modal -->
-  <div id="reselect-modal" style="display:none">
-    <div class="modal-panel">
-      <h2 id="reselect-title"></h2>
-      <p id="reselect-msg" style="white-space:pre-line;font-size:8px;line-height:1.8"></p>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-        <button class="pixel-btn red" style="width:100%" id="reselect-yes" onclick="confirmReselect()"></button>
-        <button class="pixel-btn" style="width:100%;background:#3a7a3a;color:#fff" id="reselect-no" onclick="cancelReselect()"></button>
+  <!-- Farm modal -->
+  <div id="farm-modal" style="display:none">
+    <div class="modal-panel farm-panel">
+      <div class="farm-header">
+        <h2 id="farm-title"></h2>
+        <button class="pixel-btn small red" onclick="closeFarm()">✕</button>
+      </div>
+      <div class="tab-btns">
+        <button class="tab-btn active" id="tab-btn-cricket" onclick="switchFarmTab('cricket')"></button>
+        <button class="tab-btn" id="tab-btn-chicory" onclick="switchFarmTab('chicory')"></button>
+      </div>
+      <!-- Cricket panel -->
+      <div id="farm-cricket-panel">
+        <div class="farm-canvas-wrap">
+          <canvas id="farm-cricket-canvas" width="320" height="100"></canvas>
+        </div>
+        <div class="farm-stat-row">
+          <span class="stat-label" id="lbl-cricket-count"></span>
+          <div class="stat-bar wide"><div class="stat-fill cricket" id="bar-cricket" style="width:0%"></div></div>
+          <span id="cricket-count-text" style="font-size:7px;color:#e8a020;white-space:nowrap">0 / 150</span>
+        </div>
+        <p id="cricket-info" class="farm-info"></p>
+        <div class="farm-btns">
+          <button class="pixel-btn small" id="btn-cricket-get" onclick="doCricketGet()"></button>
+          <button class="pixel-btn small blue" id="btn-cricket-feed" onclick="doCricketFeed()"></button>
+        </div>
+      </div>
+      <!-- Chicory panel -->
+      <div id="farm-chicory-panel" style="display:none">
+        <div class="farm-canvas-wrap">
+          <canvas id="farm-chicory-canvas" width="320" height="100"></canvas>
+        </div>
+        <div class="farm-stat-row">
+          <span class="stat-label" id="lbl-chicory-stage"></span>
+          <div class="stat-bar wide"><div class="stat-fill chicory" id="bar-chicory" style="width:0%"></div></div>
+          <span id="chicory-stage-text" style="font-size:7px;color:#4a9a3a;white-space:nowrap">-</span>
+        </div>
+        <p id="chicory-info" class="farm-info"></p>
+        <div class="farm-btns">
+          <button class="pixel-btn small green" id="btn-chicory-plant" onclick="doChicoryPlant()"></button>
+          <button class="pixel-btn small" id="btn-chicory-water" onclick="doChicoryWater()" style="background:#4abfe8;color:#fff"></button>
+          <button class="pixel-btn small green" id="btn-chicory-harvest" onclick="doChicoryHarvest()"></button>
+        </div>
       </div>
     </div>
   </div>
@@ -97,35 +133,6 @@ function toggleGameLang() {
   updateGameLabels();
 }
 
-function doReselect() {
-  const modal = document.getElementById('reselect-modal');
-  document.getElementById('reselect-title').textContent = t('reselect_title');
-  document.getElementById('reselect-msg').textContent = t('reselect_msg');
-  document.getElementById('reselect-yes').textContent = t('reselect_yes');
-  document.getElementById('reselect-no').textContent = t('reselect_no');
-  modal.style.display = 'flex';
-}
-
-function confirmReselect() {
-  document.getElementById('reselect-modal').style.display = 'none';
-  // Clear game state
-  AUTH.saveGameState(null);
-  AUTH.saveLizardName('');
-  gs = null;
-  lizardType = null;
-  lizardName = '';
-  scene = SCENE.SHOP;
-  bornAnim.phase = 0;
-  bornAnim.timer = 0;
-  document.getElementById('ui-overlay').style.display = 'none';
-  document.getElementById('date-display').style.display = 'none';
-  document.getElementById('btn-nav-reselect').style.display = 'none';
-}
-
-function cancelReselect() {
-  document.getElementById('reselect-modal').style.display = 'none';
-}
-
 function updateGameLabels() {
   document.getElementById('lbl-hunger').textContent = t('hunger');
   document.getElementById('lbl-happy').textContent = t('happy');
@@ -138,8 +145,10 @@ function updateGameLabels() {
   const wKey = (typeof lizardType !== 'undefined' && lizardType === 'bluetongue') ? 'water_btn_bt' : 'water_btn';
   document.getElementById('btn-water').textContent = t(wKey);
   document.getElementById('btn-nav-home').textContent = t('home_btn');
-  document.getElementById('btn-nav-reselect').textContent = t('reselect_btn');
   document.getElementById('btn-nav-logout').textContent = t('logout');
+  document.getElementById('btn-sleep').textContent = t('sleep_btn');
+  document.getElementById('btn-farm').textContent = t('farm_btn');
+  if (document.getElementById('farm-modal').style.display !== 'none') updateFarmUI();
 }
 
 function doGoHome() {
