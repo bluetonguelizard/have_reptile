@@ -43,6 +43,9 @@ function newGameState(type) {
     lastFedWeekDay: [],
     isAdult: false,
     adultNotified: false,
+    isJuvenile: false,
+    juvenileNotified: false,
+    gender: null,
     scene: SCENE.SHOP,
     lizardName: '',
     hydration: 80,    // 0-100, crested gecko needs misting, bluetongue needs water bowl
@@ -104,6 +107,10 @@ function updateGameTime() {
     if (gs.hydration < 20) gs.happy = Math.max(0, gs.happy - daysElapsed * 3);
     gs.handleCountToday = 0; // reset daily handles
     gs.waterCountToday = 0; // reset daily water count
+    if (!gs.isJuvenile && gs.gameDaysPassed >= 270) {
+      gs.isJuvenile = true;
+      gs.gender = Math.random() < 0.5 ? 'male' : 'female';
+    }
     if (!gs.isAdult && gs.gameDaysPassed >= ADULT_GAME_DAYS) {
       gs.isAdult = true;
     }
@@ -1058,11 +1065,21 @@ function drawUI() {
   const gd = getGameDate();
   document.getElementById('date-display').textContent = formatDate(gd);
   updateTimeDisplay();
-  // Age stage
+  // Age stage: 베이비(0-90) / 아성체(90-270) / 준성체(270-ADULT) / 성체(ADULT+)
   const ageEl = document.getElementById('age-label');
   if (gs.isAdult) ageEl.textContent = t('age_adult');
-  else if (gs.gameDaysPassed > 180) ageEl.textContent = t('age_juvenile');
+  else if (gs.gameDaysPassed >= 270) ageEl.textContent = t('age_juvenile');
+  else if (gs.gameDaysPassed >= 90) ageEl.textContent = t('age_subadult');
   else ageEl.textContent = t('age_baby');
+  // Gender (shown from juvenile stage onward)
+  const genderEl = document.getElementById('gender-label');
+  if (gs.gameDaysPassed >= 270 && gs.gender) {
+    genderEl.style.display = '';
+    genderEl.textContent = t(gs.gender === 'female' ? 'gender_female' : 'gender_male');
+    genderEl.style.color = gs.gender === 'female' ? '#f080c0' : '#80c0f0';
+  } else {
+    genderEl.style.display = 'none';
+  }
   // Weight
   const wUnit = lizardType === 'crestie' ? 'g' : 'g';
   document.getElementById('weight-label').textContent = `${t('weight_label')}: ${gs.weight.toFixed(1)}${wUnit}`;
@@ -1194,6 +1211,13 @@ function gameLoop(ts) {
     if (lizardAnim.timer > 3000) {
       lizardAnim.timer = 0;
       if (gs.bond < 40) lizardAnim.threatening = !lizardAnim.threatening;
+    }
+    // Juvenile notification (gender revealed)
+    if (gs.isJuvenile && !gs.juvenileNotified) {
+      gs.juvenileNotified = true;
+      const juvenileKey = gs.gender === 'female' ? 'juvenile_msg_female' : 'juvenile_msg_male';
+      showMsg(t(juvenileKey), 5000);
+      saveGame();
     }
     // Adult notification
     if (gs.isAdult && !gs.adultNotified) {
