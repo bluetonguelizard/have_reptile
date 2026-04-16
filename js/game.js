@@ -2158,7 +2158,13 @@ function showDogramMain() {
   document.getElementById('dogram-add-view').style.display = 'none';
 }
 
+const ADOPT_COST = 20;
+
 function showDogramAdd() {
+  if ((gs.coins || 0) < ADOPT_COST) {
+    showMsg(t('dogram_no_coins'));
+    return;
+  }
   document.getElementById('dogram-main-view').style.display = 'none';
   document.getElementById('dogram-add-view').style.display = '';
   document.getElementById('dogram-add-title').textContent = t('dogram_add_title');
@@ -2169,6 +2175,12 @@ function showDogramAdd() {
 }
 
 function pickNewLizardType(type) {
+  if ((gs.coins || 0) < ADOPT_COST) {
+    showMsg(t('dogram_no_coins'));
+    closeDogram();
+    return;
+  }
+  gs.coins -= ADOPT_COST;
   newLizardType = type;
   closeDogram();
   document.getElementById('name-modal').style.display = 'flex';
