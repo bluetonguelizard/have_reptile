@@ -106,7 +106,7 @@ function saveGame() {
 
 // ─── SLEEP HELPERS ───────────────────────────────────────────────────────────
 function isSleepyHour() { const h = new Date().getHours(); return h >= 21; }
-function isWakeHour()   { const h = new Date().getHours(); return h >= 7 && h < 21; }
+function isWakeHour()   { const h = new Date().getHours(); return h >= 6 && h < 21; }
 
 // ─── TIME ───────────────────────────────────────────────────────────────────
 function updateGameTime() {
