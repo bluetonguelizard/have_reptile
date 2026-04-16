@@ -5,7 +5,7 @@ const ADULT_GAME_DAYS = 548; // ~1.5 game years (365*1.5 ≈ 548)
 const ECONOMY_START_DAYS = 153; // Oct 1, 2025 — crickets & chicory seeds cost coins
 
 // Scenes
-const SCENE = { SHOP: 'shop', EGG: 'egg', ROOM: 'room' };
+const SCENE = { SHOP: 'shop', EGG: 'egg', ROOM: 'room', OUTDOOR: 'outdoor' };
 
 let canvas, ctx;
 let scene = SCENE.SHOP;
@@ -15,6 +15,7 @@ let gs = null; // game state (active lizard)
 let allLizards = []; // all lizards for current user
 let activeLizardIdx = 0;
 let newLizardType = null; // temp: type selected when adding new lizard
+let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
 
 // Pixel art colors
 const C = {
@@ -65,6 +66,7 @@ function newGameState(type) {
     chicoryWateredDays: 0,
     chicoryLastWateredDay: -1,
     chicoryStock: 0,
+    chicoryBatchSize: 1,
     pelletCount: 0,
     cgestieFoodCount: 0,
     dandelionStock: 0,
@@ -96,7 +98,7 @@ function loadGame() {
 
 function saveGame() {
   if (gs) {
-    gs.scene = scene;
+    gs.scene = (scene === SCENE.OUTDOOR) ? SCENE.ROOM : scene;
     gs.type = lizardType;
     gs.lizardName = lizardName;
     allLizards[activeLizardIdx] = { ...gs };
@@ -1205,6 +1207,8 @@ function gameLoop(ts) {
     drawShop();
   } else if (scene === SCENE.EGG) {
     drawEggScene();
+  } else if (scene === SCENE.OUTDOOR) {
+    drawOutdoor();
   } else if (scene === SCENE.ROOM) {
     drawRoom();
     // Born animation progression
@@ -1360,6 +1364,26 @@ canvas_click = function(e) {
   const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
   const my = (e.clientY - rect.top) * (canvas.height / rect.height);
   const W = canvas.width, H = canvas.height;
+
+  if (scene === SCENE.OUTDOOR && outdoorState) {
+    for (const d of outdoorState.dandelions) {
+      if (d.picked) continue;
+      const fy = d.y - 41; // flower center
+      const dist = Math.hypot(mx - d.x, my - fy);
+      if (dist < 22) {
+        d.picked = true;
+        outdoorState.gathered++;
+        updateOutdoorCounter();
+        // If stock would be full now, auto-leave
+        if ((gs.dandelionStock || 0) + outdoorState.gathered >= 10) {
+          showMsg(t('dandelion_stock_max'));
+          setTimeout(leaveOutdoor, 1000);
+        }
+        break;
+      }
+    }
+    return;
+  }
 
   if (scene === SCENE.SHOP) {
     // Click anywhere = enter shop
@@ -1621,19 +1645,27 @@ function drawFarmChicoryCanvas() {
   c.fillRect(0, H-24, W, 4);
   c.fillStyle = '#6a4a38';
   for (let i = 0; i < 7; i++) c.fillRect(10 + i*44, H-20, 14, 4);
-  const cx = W / 2, groundY = H - 22;
+  const groundY = H - 22;
   if (state === 'none') {
     c.fillStyle = '#555';
     c.font = "7px 'Press Start 2P', monospace";
     c.textAlign = 'center';
     c.fillText(currentLang === 'ko' ? '미심재' : 'not planted', W/2, H/2 + 4);
     c.textAlign = 'left';
-  } else if (state === 'growing') {
-    if (growthDays <= 1) drawChicorySprout(c, cx, groundY);
-    else if (growthDays <= 3) drawChicorySmall(c, cx, groundY);
-    else drawChicoryMedium(c, cx, groundY);
-  } else if (state === 'ready') {
-    drawChicoryFull(c, cx, groundY);
+  } else {
+    const batch = gs ? (gs.chicoryBatchSize || 1) : 1;
+    const count = Math.min(batch, 9);
+    const spacing = W / (count + 1);
+    for (let i = 0; i < count; i++) {
+      const cx = Math.round(spacing * (i + 1));
+      if (state === 'growing') {
+        if (growthDays <= 1) drawChicorySprout(c, cx, groundY);
+        else if (growthDays <= 3) drawChicorySmall(c, cx, groundY);
+        else drawChicoryMedium(c, cx, groundY);
+      } else if (state === 'ready') {
+        drawChicoryFull(c, cx, groundY);
+      }
+    }
   }
 }
 
@@ -1719,9 +1751,10 @@ function updateFarmUI() {
   document.getElementById('chicory-stage-text').textContent =
     chicState === 'none' ? t('chicory_none_text') :
     chicState === 'ready' ? t('chicory_ready_text') : t('chicory_growing_text');
+  const chicBatch = gs ? (gs.chicoryBatchSize || 1) : 1;
   document.getElementById('chicory-info').textContent =
-    chicState === 'growing' ? t('chicory_info_growing') + ` (${growthDays}/5)` :
-    chicState === 'ready' ? t('chicory_info_ready') : '';
+    chicState === 'growing' ? t('chicory_info_growing') + ` (${growthDays}/5) ×${chicBatch}` :
+    chicState === 'ready' ? t('chicory_info_ready') + ` ×${chicBatch}` : '';
   document.getElementById('chicory-stock-text').textContent = chicStock;
   // Button enable/disable
   document.getElementById('btn-chicory-plant').disabled = chicState !== 'none';
@@ -1794,7 +1827,12 @@ function doChicoryPlant() {
   gs.chicoryPlantedDay = gs.gameDaysPassed;
   gs.chicoryWateredDays = 0;
   gs.chicoryLastWateredDay = -1;
-  showMsg(gs.gameDaysPassed >= ECONOMY_START_DAYS ? t('chicory_seed_buy_ok') : t('chicory_plant_ok'));
+  gs.chicoryBatchSize = 1;
+  const inEconomy = gs.gameDaysPassed >= ECONOMY_START_DAYS;
+  const msg = inEconomy
+    ? t('chicory_seed_buy_ok').replace('{n}', 1).replace('{c}', 3)
+    : t('chicory_plant_ok').replace('{n}', 1);
+  showMsg(msg);
   saveGame();
   updateFarmUI();
 }
@@ -1816,9 +1854,11 @@ function doChicoryWater() {
 function doChicoryHarvest() {
   if (!gs) return;
   if (gs.chicoryState !== 'ready') { showMsg(t('chicory_harvest_none')); return; }
+  const batch = gs.chicoryBatchSize || 1;
   gs.chicoryState = 'none';
-  gs.chicoryStock = (gs.chicoryStock || 0) + 1;
-  showMsg(t('chicory_harvest_ok'));
+  gs.chicoryBatchSize = 1;
+  gs.chicoryStock = (gs.chicoryStock || 0) + batch;
+  showMsg(t('chicory_harvest_ok').replace('{n}', batch));
   saveGame();
   updateFarmUI();
 }
@@ -1869,18 +1909,177 @@ function doCgestieFeedLizard() {
   closeFarm();
 }
 
+function seededRand(s) {
+  const x = Math.sin(s * 9301 + 49297) * 233280;
+  return x - Math.floor(x);
+}
+
+function initOutdoorScene() {
+  const W = canvas.width, H = canvas.height;
+  const groundY = H * 0.52;
+  const seed = gs ? gs.gameDaysPassed : 0;
+  const dandelions = [];
+  for (let i = 0; i < 5; i++) {
+    const x = Math.round(W * 0.1 + seededRand(seed + i * 13) * W * 0.8);
+    const y = Math.round(groundY + 55 + seededRand(seed + i * 17 + 100) * (H - groundY - 90));
+    dandelions.push({ x, y, picked: false });
+  }
+  outdoorState = { dandelions, gathered: 0 };
+  updateOutdoorCounter();
+}
+
+function updateOutdoorCounter() {
+  const el = document.getElementById('outdoor-counter');
+  if (!el || !outdoorState) return;
+  const total = outdoorState.dandelions.length;
+  const picked = outdoorState.dandelions.filter(d => d.picked).length;
+  el.textContent = t('dandelion_outdoor_counter').replace('{n}', picked).replace('{t}', total);
+}
+
+function drawDandelionFlower(x, y, picked) {
+  const stemH = 32;
+  const fy = y - stemH - 9; // flower center y
+
+  if (picked) {
+    ctx.fillStyle = '#8a9870';
+    ctx.fillRect(x - 1, y - stemH, 2, stemH);
+    ctx.fillStyle = '#b0a080';
+    ctx.beginPath();
+    ctx.arc(x, y - stemH, 3, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  // Stem
+  ctx.fillStyle = '#3a7a1a';
+  ctx.fillRect(x - 1, y - stemH, 2, stemH);
+
+  // Leaves
+  ctx.fillStyle = '#4a9a2a';
+  ctx.save(); ctx.translate(x - 5, y - 14); ctx.rotate(-0.5);
+  ctx.beginPath(); ctx.ellipse(0, 0, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(x + 5, y - 9); ctx.rotate(0.5);
+  ctx.beginPath(); ctx.ellipse(0, 0, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // Petals
+  ctx.fillStyle = '#f8d030';
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const petalX = x + Math.cos(angle) * 12;
+    const petalY = fy + Math.sin(angle) * 12;
+    ctx.save(); ctx.translate(petalX, petalY); ctx.rotate(angle);
+    ctx.beginPath(); ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Center
+  ctx.fillStyle = '#e87820';
+  ctx.beginPath(); ctx.arc(x, fy, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f8b040';
+  ctx.beginPath(); ctx.arc(x - 1, fy - 1, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawOutdoor() {
+  const W = canvas.width, H = canvas.height;
+  const skyH = H * 0.52;
+
+  // Sky
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, skyH);
+  skyGrad.addColorStop(0, '#3a80c8');
+  skyGrad.addColorStop(1, '#90c8f0');
+  ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, W, skyH);
+
+  // Sun
+  ctx.fillStyle = '#f8e840';
+  ctx.beginPath(); ctx.arc(W * 0.82, H * 0.1, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fffaaa';
+  ctx.beginPath(); ctx.arc(W * 0.82, H * 0.1, 15, 0, Math.PI * 2); ctx.fill();
+
+  // Clouds
+  function cloud(cx, cy, sc) {
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    [[0,0,18],[22,5,13],[-18,6,11],[10,-9,11]].forEach(([ox,oy,r]) => {
+      ctx.beginPath(); ctx.arc(cx+ox*sc, cy+oy*sc, r*sc, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.fillRect(cx - 28*sc, cy, 56*sc, 16*sc);
+  }
+  cloud(W*0.18, H*0.1, 1);
+  cloud(W*0.55, H*0.07, 0.75);
+
+  // Background hills
+  ctx.fillStyle = '#4a8a38';
+  ctx.beginPath();
+  ctx.moveTo(0, skyH);
+  ctx.quadraticCurveTo(W*0.25, skyH - H*0.14, W*0.5, skyH - H*0.05);
+  ctx.quadraticCurveTo(W*0.75, skyH + H*0.04, W, skyH - H*0.09);
+  ctx.lineTo(W, skyH); ctx.closePath(); ctx.fill();
+
+  // Ground
+  const grassGrad = ctx.createLinearGradient(0, skyH, 0, H);
+  grassGrad.addColorStop(0, '#68b848'); grassGrad.addColorStop(1, '#3a8828');
+  ctx.fillStyle = grassGrad; ctx.fillRect(0, skyH, W, H - skyH);
+
+  // Grass lines texture
+  ctx.strokeStyle = 'rgba(0,60,0,0.1)'; ctx.lineWidth = 1;
+  for (let gx = 0; gx < W; gx += 9) {
+    ctx.beginPath(); ctx.moveTo(gx, skyH); ctx.lineTo(gx, H); ctx.stroke();
+  }
+
+  // Left tree
+  px(W*0.07 - 7, skyH - H*0.01, 14, H*0.14, '#6b3e1c');
+  ctx.fillStyle = '#2a6820';
+  ctx.beginPath(); ctx.arc(W*0.07, skyH - H*0.09, W*0.065, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#3a8830';
+  ctx.beginPath(); ctx.arc(W*0.07, skyH - H*0.17, W*0.048, 0, Math.PI*2); ctx.fill();
+
+  // Right bush/tree
+  px(W*0.91 - 5, skyH - H*0.01, 10, H*0.1, '#6b3e1c');
+  ctx.fillStyle = '#2a6820';
+  ctx.beginPath(); ctx.arc(W*0.91, skyH - H*0.08, W*0.055, 0, Math.PI*2); ctx.fill();
+
+  // Dandelions
+  if (outdoorState) {
+    for (const d of outdoorState.dandelions) drawDandelionFlower(d.x, d.y, d.picked);
+  }
+
+  // Tap hint (if not all picked)
+  if (outdoorState && outdoorState.dandelions.some(d => !d.picked)) {
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(W/2 - 100, H - 28, 200, 22);
+    ctx.fillStyle = '#c8e84a';
+    ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText(t('dandelion_tap_hint'), W/2, H - 13);
+    ctx.textAlign = 'left';
+  }
+}
+
 function doDandelionGather() {
   if (!gs) return;
   const gameMonth = getGameDate().month;
   if (gameMonth < 4 || gameMonth > 8) { showMsg(t('dandelion_out_of_season')); return; }
   if (gs.lastDandelionGatherDay === gs.gameDaysPassed) { showMsg(t('dandelion_gathered_today')); return; }
   if ((gs.dandelionStock || 0) >= 10) { showMsg(t('dandelion_stock_max')); return; }
-  const gathered = Math.floor(Math.random() * 3) + 1; // 1~3개
-  gs.dandelionStock = Math.min(10, (gs.dandelionStock || 0) + gathered);
-  gs.lastDandelionGatherDay = gs.gameDaysPassed;
-  showMsg(t('dandelion_gather_ok').replace('{n}', gathered));
-  saveGame();
-  updateFarmUI();
+  closeFarm();
+  scene = SCENE.OUTDOOR;
+  initOutdoorScene();
+  document.getElementById('outdoor-overlay').style.display = 'flex';
+  document.getElementById('ui-overlay').style.display = 'none';
+}
+
+function leaveOutdoor() {
+  if (outdoorState && outdoorState.gathered > 0) {
+    gs.dandelionStock = Math.min(10, (gs.dandelionStock || 0) + outdoorState.gathered);
+    gs.lastDandelionGatherDay = gs.gameDaysPassed;
+    showMsg(t('dandelion_gather_ok').replace('{n}', outdoorState.gathered));
+    saveGame();
+  }
+  outdoorState = null;
+  scene = SCENE.ROOM;
+  document.getElementById('outdoor-overlay').style.display = 'none';
+  if (gs && gs.bornAnim) document.getElementById('ui-overlay').style.display = 'flex';
 }
 
 function doDandelionFeedLizard() {

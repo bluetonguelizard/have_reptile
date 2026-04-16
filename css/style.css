@@ -154,6 +154,21 @@ canvas {
   text-align: center;
 }
 
+#outdoor-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(180deg, #081408 0%, #102010 100%);
+  border-top: 3px solid #7ab520;
+  box-shadow: 0 -4px 18px rgba(122,181,32,0.20);
+  padding: 10px 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  z-index: 100;
+}
+
 #ui-overlay {
   position: fixed;
   bottom: 0;

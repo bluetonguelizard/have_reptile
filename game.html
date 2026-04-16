@@ -64,6 +64,12 @@
     </div>
   </div>
 
+  <!-- Outdoor overlay (shown when gathering dandelions) -->
+  <div id="outdoor-overlay" style="display:none">
+    <span id="outdoor-counter" style="font-size:9px;color:#c8e84a;white-space:nowrap"></span>
+    <button class="pixel-btn small" id="btn-leave-outdoor" onclick="leaveOutdoor()" style="background:#7ab520;color:#fff"></button>
+  </div>
+
   <!-- Message box -->
   <div id="msg-box"></div>
 
@@ -233,7 +239,9 @@ function updateGameLabels() {
   document.getElementById('btn-nav-dogram').textContent = t('dogram_btn');
   document.getElementById('btn-sleep').textContent = t('sleep_btn');
   document.getElementById('btn-farm').textContent = t('farm_btn');
+  document.getElementById('btn-leave-outdoor').textContent = t('dandelion_complete_btn');
   if (document.getElementById('farm-modal').style.display !== 'none') updateFarmUI();
+  if (outdoorState) updateOutdoorCounter();
 }
 
 function doGoHome() {
