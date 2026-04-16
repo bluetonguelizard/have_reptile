@@ -14,7 +14,10 @@ let lizardName = '';
 let gs = null; // game state (active lizard)
 let allLizards = []; // all lizards for current user
 let activeLizardIdx = 0;
-let newLizardType = null; // temp: type selected when adding new lizard
+let newLizardType = null;  // temp: type selected when adding new lizard
+let newLizardMorph = null; // temp: morph selected when adding new lizard
+let newLizardColor = null; // temp: color selected when adding new lizard (crestie only)
+let newLizardTraits = [];  // temp: traits selected when adding new lizard
 let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
 
 // Pixel art colors
@@ -205,6 +208,15 @@ function updateTimeDisplay() {
 function px(x, y, w, h, color) {
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
+}
+
+function adjustHex(hex, amt) {
+  if (!hex || hex[0] !== '#') return hex;
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16)        + amt));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (n & 255)        + amt));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
 function drawText(text, x, y, size, color, align='left') {
@@ -715,7 +727,7 @@ function drawCrestieEnclosure(x, y, w, h) {
   drawCrestieHide(x + 20, y + h - 95, false);
   drawCrestieHide(x + w - 110, y + h - 80, true);
   drawLeaf(x+w-50, y+h-90);
-  if (gs.bornAnim) drawCrestie(x+w/2-20, y+h-90, { ...lizardAnim, sleeping: gs.isSleeping });
+  if (gs.bornAnim) drawCrestie(x+w/2-20, y+h-90, { ...lizardAnim, sleeping: gs.isSleeping }, { morph: gs.morph, color: gs.color, traits: gs.traits });
 }
 
 function drawCrestieHide(x, y, small) {
@@ -753,103 +765,218 @@ function drawLeaf(x, y) {
   ctx.fill();
 }
 
-function drawCrestie(x, y, anim) {
+function drawCrestie(x, y, anim, appearance) {
   const threatening = anim.threatening;
   const s = 3;
+  const morph   = (appearance && appearance.morph)  || 'flame';
+  const traits  = (appearance && appearance.traits) || [];
+  const colorId = (appearance && appearance.color)  || 'orange';
+  const c = getCrestieColors(colorId, traits);
+  const hasXH   = traits.includes('extreme_harlequin');
+  const isBold  = traits.includes('bold');
 
   // TAIL — long, prehensile, curves down then tip curls back up
-  ctx.fillStyle = '#8a5018';
-  ctx.fillRect(x-8*s, y+8*s,  s,   s  );  // tip curl end
+  ctx.fillStyle = c.tailTip;
+  ctx.fillRect(x-8*s, y+8*s,  s,   s  );
   ctx.fillRect(x-7*s, y+7*s,  2*s, 2*s);
-  ctx.fillStyle = '#9a5820';
+  ctx.fillStyle = c.tailMid;
   ctx.fillRect(x-6*s, y+6*s,  3*s, 2*s);
   ctx.fillRect(x-4*s, y+5*s,  3*s, 2*s);
-  ctx.fillStyle = '#a86020';
-  ctx.fillRect(x-2*s, y+5*s,  3*s, 3*s);  // tail base
+  ctx.fillStyle = c.bodyShade;
+  ctx.fillRect(x-2*s, y+5*s,  3*s, 3*s);
 
   // BODY — slender
-  ctx.fillStyle = '#c07020';
-  ctx.fillRect(x,      y+4*s, 11*s, 5*s);
-  // Dorsal stripe (lateral line pattern)
-  ctx.fillStyle = '#e8b050';
-  ctx.fillRect(x+s,    y+4*s,  9*s, s  );
-  // Ventral (paler belly)
-  ctx.fillStyle = '#e8c870';
-  ctx.fillRect(x+s,    y+8*s,  9*s, s  );
+  // Tricolor + extreme harlequin: cream is the dominant base color
+  if (colorId === 'tricolor' && hasXH && morph === 'harlequin') {
+    ctx.fillStyle = '#ddd0a0';  // cream/ivory base
+  } else {
+    ctx.fillStyle = c.body;
+  }
+  ctx.fillRect(x,   y+4*s, 11*s, 5*s);
 
-  // DORSAL CRESTS — fan-like spines running from neck down back (key crestie feature)
-  ctx.fillStyle = '#f0b040';
-  ctx.fillRect(x+2*s,  y+3*s,  s,   2*s);
-  ctx.fillRect(x+4*s,  y+2*s,  s,   3*s);
-  ctx.fillRect(x+6*s,  y+3*s,  s,   2*s);
-  ctx.fillRect(x+8*s,  y+2*s,  s,   3*s);
-  ctx.fillRect(x+10*s, y+s,    s,   4*s);  // tallest, near neck
+  // Base stripe/ventral (skipped for patternless)
+  if (morph !== 'patternless') {
+    ctx.fillStyle = c.stripe;
+    ctx.fillRect(x+s, y+4*s, 9*s, s);
+    ctx.fillStyle = c.ventral;
+    ctx.fillRect(x+s, y+8*s, 9*s, s);
+  }
+
+  // ── MORPH PATTERNS (drawn before crests so crests sit on top) ──
+  if (morph === 'flame' || morph === 'harlequin') {
+    const darkAmt  = isBold ? -65 : -45;
+    const patchDark = adjustHex(c.body, darkAmt);
+
+    if (morph === 'flame') {
+      const patchLight = hasXH ? adjustHex(c.ventral, 40) : c.stripe;
+      // Irregular upward-pointing bright patches
+      ctx.fillStyle = patchLight;
+      ctx.fillRect(x+1*s, y+4*s, 2*s, 2*s);
+      ctx.fillRect(x+2*s, y+3*s, s,   2*s);
+      ctx.fillRect(x+5*s, y+3*s, 2*s, 3*s);
+      ctx.fillRect(x+6*s, y+2*s, s,   2*s);
+      ctx.fillRect(x+8*s, y+4*s, 2*s, 2*s);
+      ctx.fillRect(x+9*s, y+3*s, s,   2*s);
+      if (hasXH) {
+        // Extreme: large flame coverage
+        ctx.fillRect(x+0*s, y+4*s, 4*s, 4*s);
+        ctx.fillRect(x+5*s, y+3*s, 4*s, 5*s);
+        ctx.fillRect(x+9*s, y+4*s, 2*s, 4*s);
+        ctx.fillStyle = patchDark;
+        ctx.fillRect(x+4*s, y+5*s, s, 3*s);
+        ctx.fillRect(x+8*s, y+7*s, s, 2*s);
+      }
+    } else {
+      // HARLEQUIN
+      if (hasXH && colorId === 'tricolor') {
+        // Tricolor extreme harlequin (per reference photos):
+        //   cream base already drawn above
+        //   orange patches (sporadic, medium coverage)
+        //   dark chocolate side patches (lower coverage, but visually impactful)
+        ctx.fillStyle = c.body;  // orange patches (#8a5020 area)
+        ctx.fillRect(x+2*s, y+5*s, 2*s, 3*s);
+        ctx.fillRect(x+6*s, y+4*s, 2*s, 4*s);
+        ctx.fillRect(x+9*s, y+5*s, 2*s, 3*s);
+        ctx.fillRect(x+10*s,y+3*s, s,   2*s);
+        ctx.fillStyle = '#1e0c00';  // dark chocolate patches on sides
+        ctx.fillRect(x+0*s, y+6*s, 2*s, 3*s);
+        ctx.fillRect(x+4*s, y+7*s, 2*s, 2*s);
+        ctx.fillRect(x+8*s, y+6*s, s,   3*s);
+        ctx.fillRect(x+3*s, y+4*s, s,   2*s);
+      } else if (hasXH) {
+        // Non-tricolor extreme harlequin
+        const patchLight = adjustHex(c.ventral, 40);
+        ctx.fillStyle = patchLight;
+        ctx.fillRect(x+0*s, y+3*s, 4*s, 5*s);
+        ctx.fillRect(x+1*s, y+2*s, 2*s, 2*s);
+        ctx.fillRect(x+6*s, y+3*s, 4*s, 4*s);
+        ctx.fillRect(x+7*s, y+2*s, 2*s, 2*s);
+        ctx.fillRect(x+10*s,y+3*s, 2*s, 3*s);
+        ctx.fillStyle = patchDark;
+        ctx.fillRect(x+4*s, y+4*s, 2*s, 5*s);
+        ctx.fillRect(x+0*s, y+7*s, 2*s, 2*s);
+        ctx.fillRect(x+9*s, y+6*s, 2*s, 3*s);
+        ctx.fillRect(x+2*s, y+7*s, 2*s, s  );
+      } else {
+        // Regular harlequin
+        ctx.fillStyle = c.stripe;
+        ctx.fillRect(x+1*s, y+3*s, 3*s, 4*s);
+        ctx.fillRect(x+2*s, y+2*s, s,   2*s);
+        ctx.fillRect(x+6*s, y+3*s, 3*s, 3*s);
+        ctx.fillRect(x+9*s, y+3*s, 2*s, 4*s);
+        ctx.fillStyle = patchDark;
+        ctx.fillRect(x+4*s, y+5*s, 2*s, 3*s);
+        ctx.fillRect(x+7*s, y+6*s, 2*s, 2*s);
+      }
+    }
+  }
+
+  if (morph === 'dalmatian') {
+    const spotColor = adjustHex(c.body, isBold ? -65 : -50);
+    ctx.fillStyle = spotColor;
+    ctx.fillRect(x+2*s, y+5*s, s, s);
+    ctx.fillRect(x+4*s, y+6*s, s, s);
+    ctx.fillRect(x+6*s, y+5*s, s, s);
+    ctx.fillRect(x+8*s, y+6*s, s, s);
+    ctx.fillRect(x+3*s, y+7*s, s, s);
+    ctx.fillRect(x+7*s, y+7*s, s, s);
+    ctx.fillRect(x+13*s,y+4*s, s, s);
+    ctx.fillRect(x+15*s,y+6*s, s, s);
+    if (hasXH) {
+      ctx.fillRect(x+s,    y+6*s, s, s);
+      ctx.fillRect(x+5*s,  y+7*s, s, s);
+      ctx.fillRect(x+9*s,  y+5*s, s, s);
+      ctx.fillRect(x+14*s, y+2*s, s, s);
+    }
+  }
+
+  // DORSAL CRESTS — fan-like spines running from neck down back
+  if (morph === 'pinstripe') {
+    ctx.fillStyle = adjustHex(c.crest, 20);
+    ctx.fillRect(x+2*s, y+2*s, 9*s, s);     // top connecting line
+    ctx.fillStyle = c.crest;
+    ctx.fillRect(x+2*s,  y+3*s, s, 2*s);
+    ctx.fillRect(x+4*s,  y+2*s, s, 3*s);
+    ctx.fillRect(x+6*s,  y+3*s, s, 2*s);
+    ctx.fillRect(x+8*s,  y+2*s, s, 3*s);
+    ctx.fillRect(x+10*s, y+s,   s, 4*s);
+    // Leg pinstripes
+    ctx.fillStyle = adjustHex(c.crest, 20);
+    ctx.fillRect(x+17*s, y+9*s, s, 4*s);
+    ctx.fillRect(x+6*s,  y+9*s, s, 4*s);
+  } else {
+    ctx.fillStyle = c.crest;
+    ctx.fillRect(x+2*s,  y+3*s, s,   2*s);
+    ctx.fillRect(x+4*s,  y+2*s, s,   3*s);
+    ctx.fillRect(x+6*s,  y+3*s, s,   2*s);
+    ctx.fillRect(x+8*s,  y+2*s, s,   3*s);
+    ctx.fillRect(x+10*s, y+s,   s,   4*s);
+  }
 
   // NECK
-  ctx.fillStyle = '#c87828';
-  ctx.fillRect(x+10*s, y+4*s,  3*s, 5*s);
+  ctx.fillStyle = c.neck;
+  ctx.fillRect(x+10*s, y+4*s, 3*s, 5*s);
 
   // HEAD — triangular, flares wide at temples, slightly narrow snout
-  ctx.fillStyle = '#d88030';
-  ctx.fillRect(x+12*s, y+2*s,  5*s, 8*s);  // main skull
-  ctx.fillRect(x+17*s, y+3*s,  3*s, 6*s);  // snout
-  ctx.fillStyle = '#c87020';
-  ctx.fillRect(x+19*s, y+4*s,  2*s, 4*s);  // snout tip
+  ctx.fillStyle = c.head;
+  ctx.fillRect(x+12*s, y+2*s, 5*s, 8*s);
+  ctx.fillRect(x+17*s, y+3*s, 3*s, 6*s);
+  ctx.fillStyle = c.headTip;
+  ctx.fillRect(x+19*s, y+4*s, 2*s, 4*s);
 
-  // SUPRAORBITAL RIDGE — the "eyelash" crests above eyes (iconic crested gecko feature)
-  ctx.fillStyle = '#f5c050';
-  ctx.fillRect(x+12*s, y+2*s,  s,   s  );  // brow ridge
-  ctx.fillRect(x+13*s, y+s,    3*s, 2*s);  // raised head crest
-  ctx.fillRect(x+13*s, y,      s,   s  );  // crest peak
+  // SUPRAORBITAL RIDGE — the "eyelash" crests above eyes
+  ctx.fillStyle = c.crest;
+  ctx.fillRect(x+12*s, y+2*s, s,   s  );
+  ctx.fillRect(x+13*s, y+s,   3*s, 2*s);
+  ctx.fillRect(x+13*s, y,     s,   s  );
 
-  // EYE — very large relative to head (geckos have huge eyes)
+  // EYE — very large relative to head
   ctx.fillStyle = '#1a0a00';
-  ctx.fillRect(x+13*s, y+3*s,  3*s, 4*s);  // eye socket
-  ctx.fillStyle = '#f5c800';                // bright amber iris
-  ctx.fillRect(x+13*s, y+3*s,  3*s, 3*s);
+  ctx.fillRect(x+13*s, y+3*s, 3*s, 4*s);
+  ctx.fillStyle = '#f5c800';
+  ctx.fillRect(x+13*s, y+3*s, 3*s, 3*s);
   ctx.fillStyle = C.black;
-  ctx.fillRect(x+14*s, y+3*s,  s,   3*s);  // vertical slit pupil
+  ctx.fillRect(x+14*s, y+3*s, s,   3*s);
   ctx.fillStyle = '#ffffa0';
-  ctx.fillRect(x+13*s, y+3*s,  s,   s  );  // highlight
+  ctx.fillRect(x+13*s, y+3*s, s,   s  );
 
-  // FRONT LEGS — longer, more slender than skink
-  ctx.fillStyle = '#b06018';
+  // FRONT LEGS
+  ctx.fillStyle = c.legs;
   ctx.fillRect(x+17*s, y+9*s,  2*s, 4*s);
-  ctx.fillRect(x+15*s, y+12*s, 3*s, s  );  // foot
-  ctx.fillStyle = '#f0d080';
-  ctx.fillRect(x+15*s, y+13*s, s,   s  );  // toe pad
+  ctx.fillRect(x+15*s, y+12*s, 3*s, s  );
+  ctx.fillStyle = c.ventral;
+  ctx.fillRect(x+15*s, y+13*s, s,   s  );
   ctx.fillRect(x+16*s, y+13*s, s,   s  );
 
   // BACK LEGS
-  ctx.fillStyle = '#b06018';
+  ctx.fillStyle = c.legs;
   ctx.fillRect(x+6*s,  y+9*s,  2*s, 4*s);
   ctx.fillRect(x+4*s,  y+12*s, 3*s, s  );
-  ctx.fillStyle = '#f0d080';
+  ctx.fillStyle = c.ventral;
   ctx.fillRect(x+4*s,  y+13*s, s,   s  );
   ctx.fillRect(x+5*s,  y+13*s, s,   s  );
 
   // MOUTH
   if (!anim.sleeping && threatening) {
     ctx.fillStyle = '#ff2020';
-    ctx.fillRect(x+13*s, y+8*s,  8*s, 3*s);  // wide gape
+    ctx.fillRect(x+13*s, y+8*s, 8*s, 3*s);
     ctx.fillStyle = '#ffff80';
-    ctx.fillRect(x+14*s, y+8*s,  s,   s  );
-    ctx.fillRect(x+16*s, y+8*s,  s,   s  );
-    ctx.fillRect(x+18*s, y+8*s,  s,   s  );
+    ctx.fillRect(x+14*s, y+8*s, s,   s  );
+    ctx.fillRect(x+16*s, y+8*s, s,   s  );
+    ctx.fillRect(x+18*s, y+8*s, s,   s  );
     ctx.fillStyle = '#ff8888';
-    ctx.fillRect(x+19*s, y+9*s,  2*s, s  );  // pink tongue tip
+    ctx.fillRect(x+19*s, y+9*s, 2*s, s  );
   } else {
-    ctx.fillStyle = '#b05010';
-    ctx.fillRect(x+13*s, y+9*s,  7*s, s  );  // closed mouth line
+    ctx.fillStyle = c.headTip;
+    ctx.fillRect(x+13*s, y+9*s, 7*s, s  );
   }
 
   // SLEEPING — override eyes, draw Zzz
   if (anim.sleeping) {
-    // closed eyes (horizontal line)
     ctx.fillStyle = '#3a2010';
     ctx.fillRect(x+13*s, y+4*s, 3*s, s);
-    ctx.fillRect(x+13*s, y+5*s, s, s);
-    ctx.fillRect(x+15*s, y+5*s, s, s);
+    ctx.fillRect(x+13*s, y+5*s, s,   s);
+    ctx.fillRect(x+15*s, y+5*s, s,   s);
     drawZzz(x + 20*s, y - s*2);
   }
 }
@@ -911,7 +1038,7 @@ function drawBluetongueEnclosure(x, y, w, h) {
   // Decor & lizard
   drawBluetongueHide(x+20, y+h-100);
   drawLeaf(x+w-60, y+h-100);
-  if (gs.bornAnim) drawBluetongue(x+w/2-30, y+h-95, { ...lizardAnim, sleeping: gs.isSleeping });
+  if (gs.bornAnim) drawBluetongue(x+w/2-30, y+h-95, { ...lizardAnim, sleeping: gs.isSleeping }, { morph: gs.morph, color: gs.color, traits: gs.traits });
 }
 
 function drawBluetongueHide(x, y) {
@@ -933,101 +1060,148 @@ function drawBluetongueHide(x, y) {
   ctx.fillText('HIDE', 30, 30);
 }
 
-function drawBluetongue(x, y, anim) {
+function drawBluetongue(x, y, anim, appearance) {
   const threatening = anim.threatening;
   const s = 3;
+  const morph  = (appearance && appearance.morph)  || 'northern';
+  const traits = (appearance && appearance.traits) || [];
+  const c = getBluetongueColors(morph, traits);
+  const hasXH = traits.includes('extreme_harlequin');
 
-  // TAIL — short, fat, tapers sharply (very different from gecko's long tail)
-  ctx.fillStyle = '#6a7050';
-  ctx.fillRect(x-7*s, y+6*s,  2*s, 3*s);  // tip (still thick)
-  ctx.fillStyle = '#7a8060';
-  ctx.fillRect(x-5*s, y+5*s,  2*s, 4*s);
-  ctx.fillStyle = '#8a9070';
-  ctx.fillRect(x-3*s, y+4*s,  3*s, 5*s);  // tail base
+  // TAIL — short, fat, tapers sharply
+  ctx.fillStyle = c.tail1;
+  ctx.fillRect(x-7*s, y+6*s, 2*s, 3*s);
+  ctx.fillStyle = c.tail2;
+  ctx.fillRect(x-5*s, y+5*s, 2*s, 4*s);
+  ctx.fillStyle = c.tail3;
+  ctx.fillRect(x-3*s, y+4*s, 3*s, 5*s);
 
   // BODY — heavy, cylindrical sausage
-  ctx.fillStyle = '#c0a050';
-  ctx.fillRect(x,      y+3*s, 15*s, 8*s);
+  ctx.fillStyle = c.body;
+  ctx.fillRect(x, y+3*s, 15*s, 8*s);
 
   // DARK CROSSBANDS — very prominent, key bluetongue identifier
-  ctx.fillStyle = '#2c1608';
-  ctx.fillRect(x+s,    y+3*s,  2*s, 8*s);
-  ctx.fillRect(x+5*s,  y+3*s,  2*s, 8*s);
-  ctx.fillRect(x+9*s,  y+3*s,  2*s, 8*s);
-  ctx.fillRect(x+13*s, y+3*s,  2*s, 8*s);
+  ctx.fillStyle = c.crossband;
+  const bw = morph === 'eastern' ? s : 2*s;   // narrower for eastern
+  ctx.fillRect(x+s,    y+3*s, bw, 8*s);
+  ctx.fillRect(x+5*s,  y+3*s, bw, 8*s);
+  ctx.fillRect(x+9*s,  y+3*s, bw, 8*s);
+  ctx.fillRect(x+13*s, y+3*s, bw, 8*s);
+
+  // Irian Jaya: fade upper halves of some bands (reduced pattern)
+  if (morph === 'irian_jaya') {
+    ctx.fillStyle = c.body;
+    ctx.fillRect(x+s,   y+3*s, s, 3*s);
+    ctx.fillRect(x+9*s, y+3*s, s, 3*s);
+  }
+
+  // Ajantics (실버텅): silver speckling over dark body
+  if (morph === 'ajantics') {
+    ctx.fillStyle = adjustHex(c.belly, -25);
+    ctx.fillRect(x+2*s,  y+4*s, s, s);
+    ctx.fillRect(x+4*s,  y+7*s, s, s);
+    ctx.fillRect(x+7*s,  y+4*s, s, s);
+    ctx.fillRect(x+10*s, y+6*s, s, s);
+    ctx.fillRect(x+12*s, y+3*s, s, s);
+    ctx.fillRect(x+3*s,  y+9*s, s, s);
+    ctx.fillRect(x+8*s,  y+8*s, s, s);
+  }
+
   // Pale belly
-  ctx.fillStyle = '#f0e8c0';
-  ctx.fillRect(x+s,    y+10*s, 13*s, s  );
+  ctx.fillStyle = c.belly;
+  ctx.fillRect(x+s, y+10*s, 13*s, s);
+
+  // EXTREME HARLEQUIN trait: large irregular patches over the crossbands
+  if (hasXH) {
+    ctx.fillStyle = adjustHex(c.crossband, -10);
+    ctx.fillRect(x+2*s,  y+3*s, 3*s, 5*s);
+    ctx.fillRect(x+7*s,  y+3*s, 2*s, 4*s);
+    ctx.fillRect(x+11*s, y+3*s, 3*s, 6*s);
+    ctx.fillStyle = adjustHex(c.belly, -10);
+    ctx.fillRect(x+3*s,  y+3*s, 2*s, 2*s);
+    ctx.fillRect(x+8*s,  y+4*s, 2*s, 2*s);
+  }
 
   // NECK — noticeably narrower than both body and head
-  ctx.fillStyle = '#b09848';
-  ctx.fillRect(x+15*s, y+5*s,  3*s, 5*s);
+  ctx.fillStyle = c.neck;
+  ctx.fillRect(x+15*s, y+5*s, 3*s, 5*s);
 
-  // HEAD — wide, flat, triangular (the most distinctive bluetongue feature)
-  // Back of head wider than neck, top completely flat
-  ctx.fillStyle = '#c8a058';
-  ctx.fillRect(x+17*s, y+2*s, 10*s, 10*s);  // large head block
-  ctx.fillStyle = '#d8b068';
-  ctx.fillRect(x+17*s, y+2*s, 10*s, 2*s);   // flat head top
-  // Snout tapers toward tip
-  ctx.fillStyle = '#b89048';
-  ctx.fillRect(x+25*s, y+4*s,  3*s, 6*s);
-  ctx.fillStyle = '#a88040';
-  ctx.fillRect(x+27*s, y+5*s,  s,   4*s);   // snout tip
+  // HEAD — wide, flat, triangular
+  ctx.fillStyle = c.head;
+  ctx.fillRect(x+17*s, y+2*s, 10*s, 10*s);
+  ctx.fillStyle = adjustHex(c.head, 10);
+  ctx.fillRect(x+17*s, y+2*s, 10*s, 2*s);    // flat head top
+  ctx.fillStyle = adjustHex(c.headTip, 15);
+  ctx.fillRect(x+25*s, y+4*s, 3*s, 6*s);
+  ctx.fillStyle = c.headTip;
+  ctx.fillRect(x+27*s, y+5*s, s,   4*s);     // snout tip
   // Head spots/speckles
-  ctx.fillStyle = '#805030';
-  ctx.fillRect(x+19*s, y+2*s,  s,   s  );
-  ctx.fillRect(x+22*s, y+2*s,  s,   s  );
-  ctx.fillRect(x+24*s, y+2*s,  s,   s  );
+  ctx.fillStyle = adjustHex(c.head, -30);
+  ctx.fillRect(x+19*s, y+2*s, s, s);
+  ctx.fillRect(x+22*s, y+2*s, s, s);
+  ctx.fillRect(x+24*s, y+2*s, s, s);
 
-  // EYE — beady but visible (bluetongue skink eye with scaly eyelid rim)
-  ctx.fillStyle = '#3a2800';                 // outer scaly rim
-  ctx.fillRect(x+19*s, y+3*s,  5*s, 5*s);
-  ctx.fillStyle = '#1a1000';                 // eye socket
-  ctx.fillRect(x+20*s, y+4*s,  4*s, 4*s);
-  ctx.fillStyle = '#e8c030';                 // bright golden iris
-  ctx.fillRect(x+20*s, y+4*s,  3*s, 3*s);
-  ctx.fillStyle = C.black;
-  ctx.fillRect(x+20*s, y+4*s,  2*s, 2*s);   // round pupil
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(x+21*s, y+4*s,  s,   s  );   // highlight (top-right of pupil)
+  // EYE — beady but visible
+  if (morph === 'ajantics') {
+    // All-black eye for silver tongue (아잔틱)
+    ctx.fillStyle = '#080808';
+    ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
+  } else {
+    ctx.fillStyle = '#3a2800';
+    ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+    ctx.fillStyle = '#1a1000';
+    ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
+    ctx.fillStyle = '#e8c030';
+    ctx.fillRect(x+20*s, y+4*s, 3*s, 3*s);
+    ctx.fillStyle = C.black;
+    ctx.fillRect(x+20*s, y+4*s, 2*s, 2*s);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x+21*s, y+4*s, s,   s  );
+  }
 
-  // FRONT LEGS — very short and stubby (almost comically short)
-  ctx.fillStyle = '#a88840';
-  ctx.fillRect(x+19*s, y+12*s, 4*s, 2*s);   // front leg (wide & short)
-  ctx.fillRect(x+18*s, y+13*s, 5*s, s  );   // front foot (wide toes)
-  // BACK LEGS — also very short
+  // FRONT LEGS — very short and stubby
+  ctx.fillStyle = c.legs;
+  ctx.fillRect(x+19*s, y+12*s, 4*s, 2*s);
+  ctx.fillRect(x+18*s, y+13*s, 5*s, s  );
+  // BACK LEGS
   ctx.fillRect(x+3*s,  y+11*s, 4*s, 2*s);
   ctx.fillRect(x+2*s,  y+12*s, 5*s, s  );
 
   // MOUTH + TONGUE
   if (!anim.sleeping && threatening) {
     ctx.fillStyle = '#c83020';
-    ctx.fillRect(x+18*s, y+10*s, 10*s, 4*s);  // wide open gape
-    // BLUE TONGUE — the signature feature
+    ctx.fillRect(x+18*s, y+10*s, 10*s, 4*s);
     ctx.fillStyle = '#1848c0';
     ctx.fillRect(x+27*s, y+11*s, 6*s, 2*s);
     ctx.fillStyle = '#1040a8';
-    ctx.fillRect(x+32*s, y+10*s, 2*s, s  );   // tongue fork top
-    ctx.fillRect(x+32*s, y+12*s, 2*s, s  );   // tongue fork bottom
+    ctx.fillRect(x+32*s, y+10*s, 2*s, s);
+    ctx.fillRect(x+32*s, y+12*s, 2*s, s);
     ctx.fillStyle = '#f0f0e0';
-    ctx.fillRect(x+20*s, y+10*s, s,   s  );   // teeth
-    ctx.fillRect(x+22*s, y+10*s, s,   s  );
-    ctx.fillRect(x+24*s, y+10*s, s,   s  );
+    ctx.fillRect(x+20*s, y+10*s, s, s);
+    ctx.fillRect(x+22*s, y+10*s, s, s);
+    ctx.fillRect(x+24*s, y+10*s, s, s);
   } else {
-    ctx.fillStyle = '#907040';
-    ctx.fillRect(x+19*s, y+11*s, 8*s, s  );   // closed mouth line
+    ctx.fillStyle = adjustHex(c.head, -20);
+    ctx.fillRect(x+19*s, y+11*s, 8*s, s);
   }
 
   // SLEEPING — override eyes, draw Zzz
   if (anim.sleeping) {
-    // closed eyes (cover with lid over the larger eye area)
-    ctx.fillStyle = '#3a2800';
-    ctx.fillRect(x+19*s, y+3*s,  5*s, 5*s);  // eyelid rim stays
-    ctx.fillStyle = '#805030';
-    ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);   // shut eyelid
-    ctx.fillStyle = '#1a1000';
-    ctx.fillRect(x+20*s, y+5*s, 4*s, s);     // closed line
+    if (morph === 'ajantics') {
+      ctx.fillStyle = '#080808';
+      ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);
+    } else {
+      ctx.fillStyle = '#3a2800';
+      ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+      ctx.fillStyle = '#805030';
+      ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);
+      ctx.fillStyle = '#1a1000';
+      ctx.fillRect(x+20*s, y+5*s, 4*s, s);
+    }
     drawZzz(x + 28*s, y - s);
   }
 }
@@ -1058,8 +1232,8 @@ function drawBornAnim(cx, cy) {
   } else if (bornAnim.phase === 2) {
     // Emerging
     ctx.save(); ctx.globalAlpha = 0.7+Math.sin(Date.now()/200)*0.15; ctx.restore();
-    if (lizardType === 'crestie') drawCrestie(cx-30, cy-40, { threatening: false });
-    else drawBluetongue(cx-40, cy-40, { threatening: false });
+    if (lizardType === 'crestie') drawCrestie(cx-30, cy-40, { threatening: false }, { morph: gs.morph, color: gs.color, traits: gs.traits });
+    else drawBluetongue(cx-40, cy-40, { threatening: false }, { morph: gs.morph, color: gs.color, traits: gs.traits });
     // Crack pieces
     ctx.fillStyle = lizardType === 'crestie' ? '#e87820' : '#5a7ab8';
     ctx.fillRect(cx-50, cy+10, 20, 15);
@@ -1444,6 +1618,12 @@ function confirmName() {
   const newGs = newGameState(type);
   newGs.lizardName = name;
   newGs.scene = SCENE.ROOM;
+  if (newLizardMorph) newGs.morph = newLizardMorph;
+  if (newLizardColor) newGs.color = newLizardColor;
+  if (newLizardTraits.length > 0) newGs.traits = newLizardTraits.slice();
+  newLizardMorph = null;
+  newLizardColor = null;
+  newLizardTraits = [];
   allLizards.push({ ...newGs });
   activeLizardIdx = allLizards.length - 1;
   gs = newGs;
@@ -2160,6 +2340,87 @@ function showDogramMain() {
 
 const ADOPT_COST = 20;
 
+// ─── LIZARD APPEARANCE ──────────────────────────────────────────────────────
+function getCrestieColors(colorId, traits) {
+  traits = traits || [];
+  //            [0]body    [1]bodyShd [2]stripe  [3]ventral [4]crest   [5]neck    [6]head    [7]headTip [8]legs    [9]tailTip [10]tailMid
+  const P = {
+    orange:  ['#c07020','#a86020','#e8b050','#e8c870','#f0b040','#c87828','#d88030','#c87020','#b06018','#8a5018','#9a5820'],
+    red:     ['#901818','#701010','#b83030','#c86060','#c82828','#801010','#a01818','#881010','#701010','#501010','#601010'],
+    dark:    ['#2e1a08','#1e0e04','#5a3818','#6a4828','#5a3010','#281408','#341c0c','#281008','#221008','#180808','#200c08'],
+    tricolor:['#8a5020','#6a3810','#c09050','#d4b880','#b89040','#7a4818','#9a5828','#8a4818','#7a4010','#5a3010','#6a3818'],
+    yellow:  ['#a89010','#887808','#d4c030','#e8d870','#d4c040','#988018','#b09018','#a07810','#887010','#686008','#787010'],
+    cream:   ['#c4a070','#a48050','#e8d0a0','#f0e8c8','#e0c880','#b89060','#caa878','#ba9868','#a87858','#887040','#987848'],
+    olive:   ['#5a6820','#3a4810','#7a8830','#98a850','#6a7828','#4a5818','#606828','#505818','#485018','#303810','#3a4010'],
+    gray:    ['#707070','#505050','#909090','#b0b0b0','#888888','#686868','#787878','#686868','#606060','#404040','#505050'],
+    purple:  ['#682898','#481878','#9040b8','#b870d8','#8030a8','#5a2080','#742898','#602080','#502070','#381858','#401860'],
+  };
+  const a = P[colorId] || P.orange;
+  let c = {
+    body:a[0], bodyShade:a[1], stripe:a[2], ventral:a[3],
+    crest:a[4], neck:a[5], head:a[6], headTip:a[7],
+    legs:a[8], tailTip:a[9], tailMid:a[10]
+  };
+  if (traits.includes('hypo'))        for (const k in c) c[k] = adjustHex(c[k],  50);
+  if (traits.includes('melanistic'))  for (const k in c) c[k] = adjustHex(c[k], -60);
+  if (traits.includes('high_yellow')) {
+    c.body   = adjustHex(c.body,   18);
+    c.stripe = adjustHex(c.stripe, 25);
+    c.crest  = adjustHex(c.crest,  18);
+    c.head   = adjustHex(c.head,   12);
+  }
+  return c;
+}
+
+function getBluetongueColors(morph, traits) {
+  traits = traits || [];
+  //            [0]body    [1]crossbnd [2]belly   [3]neck    [4]head    [5]headTip [6]legs    [7]tail1   [8]tail2   [9]tail3
+  const M = {
+    northern:  ['#c0a050','#2c1608','#f0e8c0','#b09848','#c8a058','#a88040','#a88840','#6a7050','#7a8060','#8a9070'],
+    eastern:   ['#909040','#201808','#e8e0a8','#807838','#989848','#787830','#887838','#505030','#606040','#707050'],
+    irian_jaya:['#808078','#181810','#d8d8c0','#686860','#787870','#585850','#686858','#404038','#505048','#606058'],
+    merauke:   ['#a07040','#180a00','#d0c890','#906030','#a87848','#887030','#906038','#503010','#603820','#704028'],
+    halmahera: ['#2c2818','#100c04','#c8bc80','#201c10','#383018','#484030','#282010','#181408','#201a0c','#302818'],
+    ajantics:  ['#262830','#0c0c10','#d0d0d4','#181820','#bec0c4','#cecece','#202028','#0e0e12','#181820','#24242c'],
+  };
+  const a = M[morph] || M.northern;
+  let c = {
+    body:a[0], crossband:a[1], belly:a[2], neck:a[3],
+    head:a[4], headTip:a[5], legs:a[6],
+    tail1:a[7], tail2:a[8], tail3:a[9]
+  };
+  if (traits.includes('hypo'))        for (const k in c) c[k] = adjustHex(c[k],  50);
+  if (traits.includes('melanistic'))  for (const k in c) c[k] = adjustHex(c[k], -50);
+  if (traits.includes('high_yellow')) {
+    c.body  = adjustHex(c.body,  20);
+    c.belly = adjustHex(c.belly, 15);
+    c.head  = adjustHex(c.head,  15);
+  }
+  return c;
+}
+
+const LIZARD_MORPHS = {
+  crestie:    ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternless'],
+  bluetongue: ['ajantics']
+};
+const LIZARD_LOCALES = {
+  bluetongue: ['northern', 'eastern', 'irian_jaya', 'merauke', 'halmahera']
+};
+const LIZARD_COLORS = {
+  crestie: [
+    { id: 'red',       hex: '#c03020' },
+    { id: 'dark',      hex: '#3a2510' },
+    { id: 'tricolor',  hex: '#a06030' },
+    { id: 'orange',    hex: '#d07010' },
+    { id: 'yellow',    hex: '#c8b020' },
+    { id: 'cream',     hex: '#d4b890' },
+    { id: 'olive',     hex: '#6a7830' },
+    { id: 'gray',      hex: '#7a7a7a' },
+    { id: 'purple',    hex: '#7a3a9a' },
+  ]
+};
+const LIZARD_TRAITS = ['high_yellow', 'hypo', 'bold', 'melanistic', 'extreme_harlequin'];
+
 function showDogramAdd() {
   if ((gs.coins || 0) < ADOPT_COST) {
     showMsg(t('dogram_no_coins'));
@@ -2167,6 +2428,9 @@ function showDogramAdd() {
   }
   document.getElementById('dogram-main-view').style.display = 'none';
   document.getElementById('dogram-add-view').style.display = '';
+  document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-color-view').style.display = 'none';
+  document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-add-title').textContent = t('dogram_add_title');
   document.getElementById('dogram-add-subtitle').textContent = t('dogram_add_subtitle');
   document.getElementById('btn-dogram-crestie').textContent = t('egg_orange');
@@ -2180,8 +2444,146 @@ function pickNewLizardType(type) {
     closeDogram();
     return;
   }
-  gs.coins -= ADOPT_COST;
   newLizardType = type;
+  newLizardMorph = null;
+  newLizardColor = null;
+  newLizardTraits = [];
+  showDogramMorph();
+}
+
+function showDogramMorph() {
+  document.getElementById('dogram-add-view').style.display = 'none';
+  document.getElementById('dogram-morph-view').style.display = '';
+  document.getElementById('dogram-color-view').style.display = 'none';
+  document.getElementById('dogram-trait-view').style.display = 'none';
+  document.getElementById('dogram-main-view').style.display = 'none';
+  const isBT = newLizardType === 'bluetongue';
+  document.getElementById('dogram-morph-title').textContent = t(isBT ? 'dogram_bt_select_title' : 'dogram_morph_title');
+  document.getElementById('dogram-morph-subtitle').textContent = t(isBT ? 'dogram_locale_subtitle' : 'dogram_morph_subtitle');
+  document.getElementById('btn-dogram-morph-back').textContent = t('dogram_back');
+
+  const btns = document.getElementById('dogram-morph-btns');
+  btns.innerHTML = '';
+
+  function makeMorphBtn(id, bgColor) {
+    const btn = document.createElement('button');
+    btn.className = 'pixel-btn dogram-type-btn';
+    btn.textContent = t('morph_' + id);
+    btn.style.background = bgColor;
+    btn.style.color = '#fff';
+    btn.onclick = () => pickNewLizardMorph(id);
+    return btn;
+  }
+
+  if (isBT) {
+    const locales = LIZARD_LOCALES[newLizardType] || [];
+    const morphs  = LIZARD_MORPHS[newLizardType]  || [];
+    if (locales.length) {
+      const lbl = document.createElement('div');
+      lbl.textContent = t('dogram_locale_title');
+      lbl.style.cssText = 'font-size:7px;color:#8ab88a;margin:6px 0 4px;text-align:center;';
+      btns.appendChild(lbl);
+      locales.forEach(id => btns.appendChild(makeMorphBtn(id, '#4a7a5a')));
+    }
+    if (morphs.length) {
+      const lbl = document.createElement('div');
+      lbl.textContent = t('dogram_morph_title');
+      lbl.style.cssText = 'font-size:7px;color:#c8a860;margin:8px 0 4px;text-align:center;';
+      btns.appendChild(lbl);
+      morphs.forEach(id => btns.appendChild(makeMorphBtn(id, '#8a6020')));
+    }
+  } else {
+    (LIZARD_MORPHS[newLizardType] || []).forEach(id => btns.appendChild(makeMorphBtn(id, '#c07020')));
+  }
+}
+
+function pickNewLizardMorph(morph) {
+  newLizardMorph = morph;
+  if (newLizardType === 'crestie') {
+    showDogramColor();
+  } else {
+    showDogramTrait();
+  }
+}
+
+function showDogramColor() {
+  document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-color-view').style.display = '';
+  document.getElementById('dogram-trait-view').style.display = 'none';
+  document.getElementById('dogram-main-view').style.display = 'none';
+  document.getElementById('dogram-color-title').textContent = t('dogram_color_title');
+  document.getElementById('dogram-color-subtitle').textContent = t('dogram_color_subtitle');
+  document.getElementById('btn-dogram-color-back').textContent = t('dogram_back');
+
+  const btns = document.getElementById('dogram-color-btns');
+  btns.innerHTML = '';
+  (LIZARD_COLORS[newLizardType] || []).forEach(color => {
+    const btn = document.createElement('button');
+    btn.className = 'pixel-btn dogram-type-btn';
+    btn.textContent = t('color_' + color.id);
+    btn.style.background = color.hex;
+    btn.style.color = ['cream', 'yellow', 'olive'].includes(color.id) ? '#1a1a2e' : '#fff';
+    btn.onclick = () => pickNewLizardColor(color.id);
+    btns.appendChild(btn);
+  });
+}
+
+function pickNewLizardColor(colorId) {
+  newLizardColor = colorId;
+  showDogramTrait();
+}
+
+function showDogramColorOrMorph() {
+  if (newLizardType === 'crestie') {
+    showDogramColor();
+  } else {
+    showDogramMorph();
+  }
+}
+
+function showDogramTrait() {
+  document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-color-view').style.display = 'none';
+  document.getElementById('dogram-trait-view').style.display = '';
+  document.getElementById('dogram-trait-title').textContent = t('dogram_trait_title');
+  document.getElementById('dogram-trait-subtitle').textContent = t('dogram_trait_subtitle');
+  document.getElementById('btn-dogram-trait-back').textContent = t('dogram_back');
+  document.getElementById('btn-dogram-confirm-traits').textContent = t('dogram_confirm_traits');
+
+  const btns = document.getElementById('dogram-trait-btns');
+  btns.innerHTML = '';
+  LIZARD_TRAITS.forEach(trait => {
+    const btn = document.createElement('button');
+    btn.className = 'pixel-btn dogram-type-btn';
+    btn.id = 'trait-btn-' + trait;
+    btn.textContent = t('trait_' + trait);
+    btn.style.background = '#2a2a4a';
+    btn.style.color = '#8888cc';
+    btn.onclick = () => toggleLizardTrait(trait);
+    btns.appendChild(btn);
+  });
+}
+
+function toggleLizardTrait(trait) {
+  const idx = newLizardTraits.indexOf(trait);
+  if (idx >= 0) newLizardTraits.splice(idx, 1);
+  else newLizardTraits.push(trait);
+  LIZARD_TRAITS.forEach(tr => {
+    const btn = document.getElementById('trait-btn-' + tr);
+    if (!btn) return;
+    const selected = newLizardTraits.includes(tr);
+    btn.style.background = selected ? '#6a3a8a' : '#2a2a4a';
+    btn.style.color = selected ? '#e0c0ff' : '#8888cc';
+  });
+}
+
+function confirmNewLizardTraits() {
+  if ((gs.coins || 0) < ADOPT_COST) {
+    showMsg(t('dogram_no_coins'));
+    closeDogram();
+    return;
+  }
+  gs.coins -= ADOPT_COST;
   closeDogram();
   document.getElementById('name-modal').style.display = 'flex';
   document.getElementById('modal-title').textContent = t('name_title');
@@ -2257,9 +2659,16 @@ function renderDogram() {
     else if (days >= 90) stage = t('age_subadult');
     const genderText = (lizardGs.gender && days >= 270)
       ? (lizardGs.gender === 'female' ? ' ♀' : ' ♂') : '';
+    const morphText = lizardGs.morph ? t('morph_' + lizardGs.morph) : '';
+    const colorText = lizardGs.color ? t('color_' + lizardGs.color) : '';
+    const traitsText = (lizardGs.traits && lizardGs.traits.length > 0)
+      ? lizardGs.traits.map(tr => t('trait_' + tr)).join(' · ')
+      : '';
+    const morphColorLine = [morphText, colorText].filter(Boolean).join(' · ');
     info.innerHTML =
       `<div class="dogram-card-name">${lizName}${genderText}</div>` +
-      `<div class="dogram-card-type">${lizType}</div>` +
+      `<div class="dogram-card-type">${lizType}${morphColorLine ? ' · ' + morphColorLine : ''}</div>` +
+      (traitsText ? `<div class="dogram-card-trait">${traitsText}</div>` : '') +
       `<div class="dogram-card-age">${stage} · ${days}${t('days_format')}</div>`;
     card.appendChild(info);
 
@@ -2277,11 +2686,13 @@ function renderDogram() {
     card.appendChild(btn);
 
     grid.appendChild(card);
-    renderMiniLizard(miniCanvas, lizardGs.type || 'crestie');
+    renderMiniLizard(miniCanvas, lizardGs);
   });
 }
 
-function renderMiniLizard(miniCanvas, type) {
+function renderMiniLizard(miniCanvas, lizardGs) {
+  const type = (lizardGs && lizardGs.type) || 'crestie';
+  const appearance = lizardGs ? { morph: lizardGs.morph, color: lizardGs.color, traits: lizardGs.traits } : {};
   const savedCtx = ctx;
   ctx = miniCanvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
@@ -2293,21 +2704,16 @@ function renderMiniLizard(miniCanvas, type) {
   ctx.fillStyle = type === 'crestie' ? '#3a2510' : '#1a2a1a';
   ctx.fillRect(0, Math.floor(H * 0.72), W, Math.ceil(H * 0.28));
   ctx.save();
-  // Scale 0.48 — crestie: spans ~x-24 to x+90px, height ~y+6 to y+42
-  // With scale 0.48: width~55px, height~17px — center in 120x80
   const sc = 0.48;
   const mockAnim = { frame: 0, timer: 0, threatening: false, sleeping: false };
   if (type === 'crestie') {
-    // Lizard body center roughly at (x+22, y+15) in lizard space
     ctx.translate(W/2 - 22*sc, H*0.55 - 15*sc);
     ctx.scale(sc, sc);
-    drawCrestie(0, 0, mockAnim);
+    drawCrestie(0, 0, mockAnim, appearance);
   } else {
-    // Bluetongue: spans x-21 to x+90, height y+2 to y+14
-    // Body center ~(x+34, y+8) in lizard space
     ctx.translate(W/2 - 34*sc, H*0.55 - 8*sc);
     ctx.scale(sc, sc);
-    drawBluetongue(0, 0, mockAnim);
+    drawBluetongue(0, 0, mockAnim, appearance);
   }
   ctx.restore();
   ctx = savedCtx;

@@ -197,6 +197,43 @@
           <button class="pixel-btn small" id="btn-dogram-back" onclick="showDogramMain()"></button>
         </div>
       </div>
+      <!-- Morph view: pick morph -->
+      <div id="dogram-morph-view" style="display:none">
+        <div class="dogram-header">
+          <h2 id="dogram-morph-title"></h2>
+          <button class="pixel-btn small red" onclick="closeDogram()">✕</button>
+        </div>
+        <p id="dogram-morph-subtitle" style="font-size:7px;color:#aaa;text-align:center;margin-bottom:14px;line-height:1.8;white-space:pre-line"></p>
+        <div class="dogram-type-btns" id="dogram-morph-btns"></div>
+        <div style="text-align:center;margin-top:12px">
+          <button class="pixel-btn small" id="btn-dogram-morph-back" onclick="showDogramAdd()"></button>
+        </div>
+      </div>
+      <!-- Color view: pick color (crestie only) -->
+      <div id="dogram-color-view" style="display:none">
+        <div class="dogram-header">
+          <h2 id="dogram-color-title"></h2>
+          <button class="pixel-btn small red" onclick="closeDogram()">✕</button>
+        </div>
+        <p id="dogram-color-subtitle" style="font-size:7px;color:#aaa;text-align:center;margin-bottom:14px;line-height:1.8;white-space:pre-line"></p>
+        <div class="dogram-type-btns" id="dogram-color-btns"></div>
+        <div style="text-align:center;margin-top:12px">
+          <button class="pixel-btn small" id="btn-dogram-color-back" onclick="showDogramMorph()"></button>
+        </div>
+      </div>
+      <!-- Trait view: pick traits -->
+      <div id="dogram-trait-view" style="display:none">
+        <div class="dogram-header">
+          <h2 id="dogram-trait-title"></h2>
+          <button class="pixel-btn small red" onclick="closeDogram()">✕</button>
+        </div>
+        <p id="dogram-trait-subtitle" style="font-size:7px;color:#aaa;text-align:center;margin-bottom:14px;line-height:1.8;white-space:pre-line"></p>
+        <div class="dogram-type-btns" id="dogram-trait-btns"></div>
+        <div style="text-align:center;margin-top:12px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="pixel-btn small" id="btn-dogram-trait-back" onclick="showDogramColorOrMorph()"></button>
+          <button class="pixel-btn small green" id="btn-dogram-confirm-traits" onclick="confirmNewLizardTraits()"></button>
+        </div>
+      </div>
     </div>
   </div>
 

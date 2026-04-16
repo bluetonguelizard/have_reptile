@@ -484,6 +484,11 @@ canvas {
   font-size: 6px;
   color: #7a6898;
 }
+.dogram-card-trait {
+  font-size: 6px;
+  color: #b090d8;
+  margin-bottom: 2px;
+}
 
 .dogram-enter-btn {
   width: 100%;
