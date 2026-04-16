@@ -46,5 +46,41 @@ const AUTH = {
       users[username].lizardName = name;
       this.saveUsers(users);
     }
+  },
+  getLizards() {
+    const name = localStorage.getItem('tgs_current');
+    if (!name) return [];
+    const users = this.getUsers();
+    const user = users[name];
+    if (!user) return [];
+    // Migration: old single-lizard format
+    if (user.gameState && !user.lizards) {
+      const gs = { ...user.gameState };
+      if (!gs.lizardName) gs.lizardName = user.lizardName || '';
+      return [gs];
+    }
+    return user.lizards || [];
+  },
+  getActiveLizardIndex() {
+    const name = localStorage.getItem('tgs_current');
+    if (!name) return 0;
+    const users = this.getUsers();
+    const user = users[name];
+    return (user && typeof user.activeLizardIndex === 'number') ? user.activeLizardIndex : 0;
+  },
+  saveAllLizards(lizards, activeIdx) {
+    const username = localStorage.getItem('tgs_current');
+    if (!username) return;
+    const users = this.getUsers();
+    if (users[username]) {
+      users[username].lizards = lizards;
+      users[username].activeLizardIndex = activeIdx;
+      // Legacy compat: keep old fields pointing to active lizard
+      if (lizards[activeIdx]) {
+        users[username].gameState = lizards[activeIdx];
+        users[username].lizardName = lizards[activeIdx].lizardName || '';
+      }
+      this.saveUsers(users);
+    }
   }
 };

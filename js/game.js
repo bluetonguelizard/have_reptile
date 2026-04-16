@@ -2,6 +2,7 @@
 const GAME_START = { year: 2025, month: 5, day: 1 }; // May 1, 2025 (Thu)
 const MS_PER_GAME_DAY = 13 * 60 * 1000; // 13 real minutes = 1 game day
 const ADULT_GAME_DAYS = 548; // ~1.5 game years (365*1.5 ≈ 548)
+const ECONOMY_START_DAYS = 153; // Oct 1, 2025 — crickets & chicory seeds cost coins
 
 // Scenes
 const SCENE = { SHOP: 'shop', EGG: 'egg', ROOM: 'room' };
@@ -10,7 +11,10 @@ let canvas, ctx;
 let scene = SCENE.SHOP;
 let lizardType = null; // 'crestie' | 'bluetongue'
 let lizardName = '';
-let gs = null; // game state
+let gs = null; // game state (active lizard)
+let allLizards = []; // all lizards for current user
+let activeLizardIdx = 0;
+let newLizardType = null; // temp: type selected when adding new lizard
 
 // Pixel art colors
 const C = {
@@ -73,12 +77,20 @@ function newGameState(type) {
 function loadGame() {
   const user = AUTH.currentUser();
   if (!user) { window.location.href = 'index.html'; return; }
-  lizardName = user.lizardName || '';
-  gs = user.gameState ? { ...newGameState('crestie'), ...user.gameState } : null;
-  if (gs) {
-    scene = gs.scene || SCENE.SHOP;
+  allLizards = AUTH.getLizards();
+  activeLizardIdx = AUTH.getActiveLizardIndex();
+  if (activeLizardIdx >= allLizards.length) activeLizardIdx = 0;
+  if (allLizards.length > 0 && allLizards[activeLizardIdx]) {
+    gs = { ...newGameState('crestie'), ...allLizards[activeLizardIdx] };
+    lizardName = gs.lizardName || '';
     lizardType = gs.type || null;
+    scene = gs.scene || SCENE.SHOP;
     updateGameTime();
+    // Persist migration
+    if (!user.lizards) AUTH.saveAllLizards(allLizards, activeLizardIdx);
+  } else {
+    gs = null;
+    scene = SCENE.SHOP;
   }
 }
 
@@ -87,7 +99,8 @@ function saveGame() {
     gs.scene = scene;
     gs.type = lizardType;
     gs.lizardName = lizardName;
-    AUTH.saveGameState(gs);
+    allLizards[activeLizardIdx] = { ...gs };
+    AUTH.saveAllLizards(allLizards, activeLizardIdx);
   }
 }
 
@@ -1271,6 +1284,8 @@ window.addEventListener('load', () => {
     if (gs.bornAnim) document.getElementById('ui-overlay').style.display = 'flex';
   }
 
+  updateDogramButton();
+
   // Touch support for canvas
   canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
@@ -1304,6 +1319,7 @@ window.addEventListener('load', () => {
       const gd = getGameDate();
       document.getElementById('date-display').textContent = formatDate(gd);
       updateTimeDisplay();
+      drawUI();
       const now = Date.now();
       // Show sleepy message periodically at night (every 60s)
       if (gs.bornAnim && !gs.isSleeping && isSleepyHour()) {
@@ -1377,11 +1393,12 @@ canvas_mousemove = function(e) {
 };
 
 function pickEgg(type) {
-  lizardType = type;
+  newLizardType = type;
   // Show name modal
   document.getElementById('name-modal').style.display = 'flex';
   document.getElementById('modal-title').textContent = t('name_title');
   document.getElementById('modal-prompt').textContent = t('name_prompt');
+  document.getElementById('lizard-name-input').value = '';
   document.getElementById('lizard-name-input').placeholder = t('name_placeholder');
   document.getElementById('modal-confirm').textContent = t('name_btn');
 }
@@ -1389,17 +1406,32 @@ function pickEgg(type) {
 function confirmName() {
   const name = document.getElementById('lizard-name-input').value.trim();
   if (!name) return;
-  lizardName = name;
-  AUTH.saveLizardName(name);
   document.getElementById('name-modal').style.display = 'none';
-  // Init game state
-  gs = newGameState(lizardType);
-  gs.lizardName = name;
+  const type = newLizardType || lizardType;
+  newLizardType = null;
+  // Save current lizard if exists
+  if (gs) {
+    gs.scene = scene;
+    gs.type = lizardType;
+    gs.lizardName = lizardName;
+    allLizards[activeLizardIdx] = { ...gs };
+  }
+  // Create new lizard
+  const newGs = newGameState(type);
+  newGs.lizardName = name;
+  newGs.scene = SCENE.ROOM;
+  allLizards.push({ ...newGs });
+  activeLizardIdx = allLizards.length - 1;
+  gs = newGs;
+  lizardType = type;
+  lizardName = name;
   scene = SCENE.ROOM;
-  gs.scene = SCENE.ROOM;
-  saveGame();
+  AUTH.saveAllLizards(allLizards, activeLizardIdx);
   document.getElementById('date-display').style.display = 'block';
+  document.getElementById('ui-overlay').style.display = 'none';
   updateTimeDisplay();
+  updateDogramButton();
+  updateGameLabels();
 }
 
 // ─── FARM PIXEL ART ───────────────────────────────────────────────────────────
@@ -1644,9 +1676,10 @@ function updateFarmUI() {
   document.getElementById('tab-btn-cgestie').textContent = t('farm_tab_cgestie');
   document.getElementById('lbl-cricket-count').textContent = t('cricket_count_label');
   document.getElementById('lbl-chicory-stage').textContent = t('chicory_stage_label');
-  document.getElementById('btn-cricket-get').textContent = t('cricket_get_btn');
+  const inEconomy = gs && gs.gameDaysPassed >= ECONOMY_START_DAYS;
+  document.getElementById('btn-cricket-get').textContent = inEconomy ? t('cricket_buy_btn') : t('cricket_get_btn');
   document.getElementById('btn-cricket-feed').textContent = t('cricket_feed_btn');
-  document.getElementById('btn-chicory-plant').textContent = t('chicory_plant_btn');
+  document.getElementById('btn-chicory-plant').textContent = inEconomy ? t('chicory_seed_buy_btn') : t('chicory_plant_btn');
   document.getElementById('btn-chicory-water').textContent = t('chicory_water_btn');
   document.getElementById('btn-chicory-harvest').textContent = t('chicory_harvest_btn');
   document.getElementById('btn-chicory-feed-lizard').textContent = t('chicory_feed_lizard_btn');
@@ -1723,10 +1756,14 @@ function updateFarmUI() {
 function doCricketGet() {
   if (!gs) return;
   if ((gs.cricketCount || 0) >= 150) { showMsg(t('cricket_get_max')); return; }
+  if (gs.gameDaysPassed >= ECONOMY_START_DAYS) {
+    if ((gs.coins || 0) < 5) { showMsg(t('cricket_buy_no_coins')); return; }
+    gs.coins -= 5;
+  }
   gs.cricketCount = Math.min(150, (gs.cricketCount || 0) + 20);
   gs.lastCricketBreedDay = gs.gameDaysPassed;
   if ((gs.lastCricketCareDay || -1) < 0) gs.lastCricketCareDay = gs.gameDaysPassed;
-  showMsg(t('cricket_get_ok'));
+  showMsg(gs.gameDaysPassed >= ECONOMY_START_DAYS ? t('cricket_buy_ok') : t('cricket_get_ok'));
   saveGame();
   updateFarmUI();
 }
@@ -1749,11 +1786,15 @@ function doCricketFeed() {
 function doChicoryPlant() {
   if (!gs) return;
   if (gs.chicoryState !== 'none') { showMsg(t('chicory_plant_already')); return; }
+  if (gs.gameDaysPassed >= ECONOMY_START_DAYS) {
+    if ((gs.coins || 0) < 3) { showMsg(t('chicory_seed_no_coins')); return; }
+    gs.coins -= 3;
+  }
   gs.chicoryState = 'growing';
   gs.chicoryPlantedDay = gs.gameDaysPassed;
   gs.chicoryWateredDays = 0;
   gs.chicoryLastWateredDay = -1;
-  showMsg(t('chicory_plant_ok'));
+  showMsg(gs.gameDaysPassed >= ECONOMY_START_DAYS ? t('chicory_seed_buy_ok') : t('chicory_plant_ok'));
   saveGame();
   updateFarmUI();
 }
@@ -1894,4 +1935,169 @@ function doCricketCare() {
   gs.lastCricketCareDay = gs.gameDaysPassed;
   saveGame();
   updateFarmUI();
+}
+
+// ─── DOGRAM (도감) ────────────────────────────────────────────────────────────
+function updateDogramButton() {
+  const btn = document.getElementById('btn-nav-dogram');
+  if (btn) btn.style.display = allLizards.length > 0 ? '' : 'none';
+}
+
+function openDogram() {
+  closeFarm();
+  showDogramMain();
+  renderDogram();
+  document.getElementById('dogram-modal').style.display = 'flex';
+}
+
+function closeDogram() {
+  document.getElementById('dogram-modal').style.display = 'none';
+}
+
+function showDogramMain() {
+  document.getElementById('dogram-main-view').style.display = '';
+  document.getElementById('dogram-add-view').style.display = 'none';
+}
+
+function showDogramAdd() {
+  document.getElementById('dogram-main-view').style.display = 'none';
+  document.getElementById('dogram-add-view').style.display = '';
+  document.getElementById('dogram-add-title').textContent = t('dogram_add_title');
+  document.getElementById('dogram-add-subtitle').textContent = t('dogram_add_subtitle');
+  document.getElementById('btn-dogram-crestie').textContent = t('egg_orange');
+  document.getElementById('btn-dogram-bt').textContent = t('egg_blue');
+  document.getElementById('btn-dogram-back').textContent = t('dogram_back');
+}
+
+function pickNewLizardType(type) {
+  newLizardType = type;
+  closeDogram();
+  document.getElementById('name-modal').style.display = 'flex';
+  document.getElementById('modal-title').textContent = t('name_title');
+  document.getElementById('modal-prompt').textContent = t('name_prompt');
+  document.getElementById('lizard-name-input').value = '';
+  document.getElementById('lizard-name-input').placeholder = t('name_placeholder');
+  document.getElementById('modal-confirm').textContent = t('name_btn');
+}
+
+function switchToLizard(idx) {
+  if (idx < 0 || idx >= allLizards.length) return;
+  // Save current lizard
+  if (gs) {
+    gs.scene = scene;
+    gs.type = lizardType;
+    gs.lizardName = lizardName;
+    allLizards[activeLizardIdx] = { ...gs };
+  }
+  // Switch
+  activeLizardIdx = idx;
+  gs = { ...newGameState('crestie'), ...allLizards[idx] };
+  // Reset animations for new lizard
+  bornAnim = { phase: 0, timer: 0 };
+  lizardAnim = { frame: 0, timer: 0, threatening: true, threatTimer: 300 };
+  lizardName = gs.lizardName || '';
+  lizardType = gs.type || null;
+  scene = gs.scene || SCENE.ROOM;
+  updateGameTime();
+  AUTH.saveAllLizards(allLizards, activeLizardIdx);
+  closeDogram();
+  // Update UI
+  const uiOverlay = document.getElementById('ui-overlay');
+  const dateDisplay = document.getElementById('date-display');
+  if (scene === SCENE.ROOM && gs) {
+    dateDisplay.style.display = 'block';
+    uiOverlay.style.display = gs.bornAnim ? 'flex' : 'none';
+    if (gs.bornAnim) lizardAnim.threatening = gs.bond < 40;
+    updateTimeDisplay();
+  } else {
+    uiOverlay.style.display = 'none';
+    dateDisplay.style.display = 'none';
+  }
+  updateGameLabels();
+}
+
+function renderDogram() {
+  const grid = document.getElementById('dogram-grid');
+  grid.innerHTML = '';
+  document.getElementById('dogram-title').textContent = t('dogram_title');
+  document.getElementById('btn-add-lizard').textContent = t('dogram_add');
+
+  allLizards.forEach((lizardGs, idx) => {
+    const isActive = idx === activeLizardIdx;
+    const card = document.createElement('div');
+    card.className = 'dogram-card' + (isActive ? ' dogram-card-active' : '');
+
+    // Mini canvas
+    const miniCanvas = document.createElement('canvas');
+    miniCanvas.width = 120;
+    miniCanvas.height = 80;
+    miniCanvas.className = 'dogram-mini-canvas';
+    card.appendChild(miniCanvas);
+
+    // Info section
+    const info = document.createElement('div');
+    info.className = 'dogram-card-info';
+    const lizName = lizardGs.lizardName || '???';
+    const lizType = lizardGs.type === 'crestie' ? t('type_crestie') : t('type_bt');
+    const days = lizardGs.gameDaysPassed || 0;
+    let stage = t('age_baby');
+    if (lizardGs.isAdult) stage = t('age_adult');
+    else if (days >= 270) stage = t('age_juvenile');
+    else if (days >= 90) stage = t('age_subadult');
+    const genderText = (lizardGs.gender && days >= 270)
+      ? (lizardGs.gender === 'female' ? ' ♀' : ' ♂') : '';
+    info.innerHTML =
+      `<div class="dogram-card-name">${lizName}${genderText}</div>` +
+      `<div class="dogram-card-type">${lizType}</div>` +
+      `<div class="dogram-card-age">${stage} · ${days}${t('days_format')}</div>`;
+    card.appendChild(info);
+
+    // Enter button
+    const btn = document.createElement('button');
+    btn.className = 'pixel-btn small dogram-enter-btn';
+    if (isActive) {
+      btn.textContent = t('dogram_current');
+      btn.style.background = '#4ad94a';
+      btn.style.color = '#1a1a2e';
+    } else {
+      btn.textContent = t('dogram_enter');
+    }
+    btn.onclick = () => switchToLizard(idx);
+    card.appendChild(btn);
+
+    grid.appendChild(card);
+    renderMiniLizard(miniCanvas, lizardGs.type || 'crestie');
+  });
+}
+
+function renderMiniLizard(miniCanvas, type) {
+  const savedCtx = ctx;
+  ctx = miniCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const W = miniCanvas.width, H = miniCanvas.height;
+  // Background
+  ctx.fillStyle = type === 'crestie' ? '#2a1808' : '#0a1a14';
+  ctx.fillRect(0, 0, W, H);
+  // Mini floor
+  ctx.fillStyle = type === 'crestie' ? '#3a2510' : '#1a2a1a';
+  ctx.fillRect(0, Math.floor(H * 0.72), W, Math.ceil(H * 0.28));
+  ctx.save();
+  // Scale 0.48 — crestie: spans ~x-24 to x+90px, height ~y+6 to y+42
+  // With scale 0.48: width~55px, height~17px — center in 120x80
+  const sc = 0.48;
+  const mockAnim = { frame: 0, timer: 0, threatening: false, sleeping: false };
+  if (type === 'crestie') {
+    // Lizard body center roughly at (x+22, y+15) in lizard space
+    ctx.translate(W/2 - 22*sc, H*0.55 - 15*sc);
+    ctx.scale(sc, sc);
+    drawCrestie(0, 0, mockAnim);
+  } else {
+    // Bluetongue: spans x-21 to x+90, height y+2 to y+14
+    // Body center ~(x+34, y+8) in lizard space
+    ctx.translate(W/2 - 34*sc, H*0.55 - 8*sc);
+    ctx.scale(sc, sc);
+    drawBluetongue(0, 0, mockAnim);
+  }
+  ctx.restore();
+  ctx = savedCtx;
 }

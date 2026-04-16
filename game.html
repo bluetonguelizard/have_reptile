@@ -21,6 +21,7 @@
 <div id="game-nav">
   <button class="pixel-btn small" id="btn-nav-home" onclick="doGoHome()">홈</button>
   <button class="pixel-btn small red" id="btn-nav-logout" onclick="doLogout()">로그아웃</button>
+  <button class="pixel-btn small" id="btn-nav-dogram" onclick="openDogram()" style="display:none;background:#6a3a8a;color:#e0c0ff"></button>
 </div>
 
 <div id="game-container">
@@ -161,6 +162,38 @@
     </div>
   </div>
 
+  <!-- Dogram modal -->
+  <div id="dogram-modal" style="display:none">
+    <div class="modal-panel dogram-panel">
+      <!-- Main view: list of lizards -->
+      <div id="dogram-main-view">
+        <div class="dogram-header">
+          <h2 id="dogram-title"></h2>
+          <button class="pixel-btn small red" onclick="closeDogram()">✕</button>
+        </div>
+        <div id="dogram-grid"></div>
+        <div style="margin-top:14px;text-align:center">
+          <button class="pixel-btn small" id="btn-add-lizard" onclick="showDogramAdd()" style="background:#6a3a8a;color:#e0c0ff"></button>
+        </div>
+      </div>
+      <!-- Add view: pick species -->
+      <div id="dogram-add-view" style="display:none">
+        <div class="dogram-header">
+          <h2 id="dogram-add-title"></h2>
+          <button class="pixel-btn small red" onclick="closeDogram()">✕</button>
+        </div>
+        <p id="dogram-add-subtitle" style="font-size:7px;color:#aaa;text-align:center;margin-bottom:14px;line-height:1.8"></p>
+        <div class="dogram-type-btns">
+          <button class="pixel-btn dogram-type-btn" id="btn-dogram-crestie" onclick="pickNewLizardType('crestie')" style="background:#e87820;color:#fff"></button>
+          <button class="pixel-btn dogram-type-btn" id="btn-dogram-bt" onclick="pickNewLizardType('bluetongue')" style="background:#5a8a6a;color:#fff"></button>
+        </div>
+        <div style="text-align:center;margin-top:12px">
+          <button class="pixel-btn small" id="btn-dogram-back" onclick="showDogramMain()"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Name modal -->
   <div id="name-modal" style="display:none">
     <div class="modal-panel">
@@ -197,6 +230,7 @@ function updateGameLabels() {
   document.getElementById('btn-water').textContent = t(wKey);
   document.getElementById('btn-nav-home').textContent = t('home_btn');
   document.getElementById('btn-nav-logout').textContent = t('logout');
+  document.getElementById('btn-nav-dogram').textContent = t('dogram_btn');
   document.getElementById('btn-sleep').textContent = t('sleep_btn');
   document.getElementById('btn-farm').textContent = t('farm_btn');
   if (document.getElementById('farm-modal').style.display !== 'none') updateFarmUI();

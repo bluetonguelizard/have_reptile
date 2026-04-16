@@ -382,3 +382,121 @@ canvas {
   .stat-bar.wide { width: 80px; }
   .tab-btn { font-size: 7px; padding: 8px 4px; }
 }
+
+/* ─── DOGRAM (도감) ──────────────────────────────────────────────────────── */
+#dogram-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.90);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.dogram-panel {
+  max-width: 480px;
+  width: 94%;
+  padding: 20px 18px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.dogram-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.dogram-header h2 {
+  margin: 0;
+  font-size: 10px;
+  color: #e0c0ff;
+}
+
+#dogram-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dogram-card {
+  background: #0d0d22;
+  border: 3px solid #444466;
+  box-shadow: 4px 4px 0 #07070f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.dogram-card:hover { border-color: #9a60cc; }
+.dogram-card-active {
+  border-color: #6a3a8a;
+  background: #150d22;
+  box-shadow: 4px 4px 0 #2a1040, 0 0 12px rgba(106,58,138,0.3);
+}
+
+.dogram-mini-canvas {
+  width: 120px;
+  height: 80px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 2px solid #2a1a3a;
+  display: block;
+}
+
+.dogram-card-info {
+  text-align: center;
+  width: 100%;
+}
+.dogram-card-name {
+  font-size: 8px;
+  color: #e8d0ff;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dogram-card-type {
+  font-size: 6px;
+  color: #9a80b8;
+  margin-bottom: 3px;
+}
+.dogram-card-age {
+  font-size: 6px;
+  color: #7a6898;
+}
+
+.dogram-enter-btn {
+  width: 100%;
+  font-size: 7px !important;
+  padding: 6px 4px !important;
+}
+
+.dogram-type-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.dogram-type-btn {
+  font-size: 8px !important;
+  padding: 12px 14px !important;
+  min-width: 120px;
+}
+
+@media (max-width: 600px) {
+  #dogram-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dogram-card { padding: 8px 6px; }
+  .dogram-mini-canvas { width: 100px; height: 67px; }
+  .dogram-card-name { font-size: 7px; }
+  .dogram-type-btn { min-width: 90px; font-size: 7px !important; }
+}
+
+@media (max-width: 380px) {
+  #dogram-grid { grid-template-columns: 1fr; }
+}
