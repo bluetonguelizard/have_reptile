@@ -73,6 +73,7 @@ function newGameState(type) {
     chicoryBatchSize: 1,
     pelletCount: 0,
     cgestieFoodCount: 0,
+    lastCgestieFoodGetDay: -3,
     btFoodCount: 0,
     lastBtFoodGetDay: -3,
     dandelionStock: 0,
@@ -1247,20 +1248,39 @@ function drawBluetongue(x, y, anim, appearance) {
 }
 
 function drawBornAnim(cx, cy) {
+  const tm = bornAnim.timer;
+  const eggShellColor = lizardType === 'crestie' ? '#e87820' : '#5a7ab8';
+
   if (bornAnim.phase === 0) {
-    // Show egg
+    // Phase 0: egg wobbles gently — something is moving inside
+    const wobble = Math.sin(tm / 160) * 5 * Math.min(1, tm / 600);
+    ctx.save();
+    ctx.translate(cx - 40 + 40, cy - 50 + 55);
+    ctx.rotate((wobble * Math.PI) / 180);
+    ctx.translate(-(cx - 40 + 40), -(cy - 50 + 55));
     if (lizardType === 'crestie') drawEgg(cx-40, cy-50, 'orange', false);
     else {
-      // Blue tongue: egg turns yellow/opaque first
-      ctx.save();
       ctx.globalAlpha = 0.9;
       drawEgg(cx-40, cy-50, 'yellow_bt', false);
-      ctx.restore();
     }
+    ctx.restore();
+
   } else if (bornAnim.phase === 1) {
-    // Cracking effect
+    // Phase 1: first crack appears, egg shakes harder
+    const shake = Math.sin(tm / 80) * 4;
     const eggColor = lizardType === 'crestie' ? 'orange' : 'blue';
-    drawEgg(cx-40, cy-50, eggColor, false);
+    drawEgg(cx - 40 + shake, cy - 50, eggColor, false);
+    // Faint inner glow
+    ctx.save();
+    ctx.globalAlpha = 0.18 + Math.sin(tm / 150) * 0.08;
+    ctx.fillStyle = '#ffffaa';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 20, 22, 28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // First crack line
+    ctx.save();
+    ctx.translate(shake, 0);
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1269,15 +1289,66 @@ function drawBornAnim(cx, cy) {
     ctx.lineTo(cx, cy-35);
     ctx.lineTo(cx+5, cy-10);
     ctx.stroke();
+    ctx.restore();
+
   } else if (bornAnim.phase === 2) {
-    // Emerging
-    ctx.save(); ctx.globalAlpha = 0.7+Math.sin(Date.now()/200)*0.15; ctx.restore();
+    // Phase 2: many cracks, violent shaking, glow brightens
+    const shake = (Math.random() - 0.5) * 8;
+    const eggColor = lizardType === 'crestie' ? 'orange' : 'blue';
+    drawEgg(cx - 40 + shake, cy - 50 + shake * 0.4, eggColor, false);
+    // Bright inner glow
+    ctx.save();
+    ctx.globalAlpha = 0.35 + Math.sin(tm / 100) * 0.12;
+    ctx.fillStyle = '#ffffcc';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 20, 26, 32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // Multiple crack lines
+    ctx.save();
+    ctx.translate(shake, shake * 0.4);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx-20, cy-50); ctx.lineTo(cx-15, cy-20); ctx.lineTo(cx, cy-35); ctx.lineTo(cx+5, cy-10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx+10, cy-60); ctx.lineTo(cx+5, cy-38); ctx.lineTo(cx+16, cy-28);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx-28, cy-42); ctx.lineTo(cx-18, cy-22); ctx.lineTo(cx-25, cy-8);
+    ctx.stroke();
+    ctx.restore();
+
+  } else if (bornAnim.phase === 3) {
+    // Phase 3: lizard fully out, shell pieces on ground, sparkles
+    const pulse = 0.88 + Math.sin(tm / 220) * 0.12;
+    ctx.save();
+    ctx.globalAlpha = pulse;
     if (lizardType === 'crestie') drawCrestie(cx-30, cy-40, { threatening: false }, { morph: gs.morph, color: gs.color, traits: gs.traits });
     else drawBluetongue(cx-40, cy-40, { threatening: false }, { morph: gs.morph, color: gs.color, traits: gs.traits });
-    // Crack pieces
-    ctx.fillStyle = lizardType === 'crestie' ? '#e87820' : '#5a7ab8';
-    ctx.fillRect(cx-50, cy+10, 20, 15);
-    ctx.fillRect(cx+20, cy+5, 18, 12);
+    ctx.restore();
+    // Shell pieces scattered on ground
+    ctx.fillStyle = eggShellColor;
+    ctx.save(); ctx.translate(cx-52, cy+18); ctx.rotate(-0.35); ctx.fillRect(-11,-7,22,14); ctx.restore();
+    ctx.save(); ctx.translate(cx+38, cy+12); ctx.rotate(0.45); ctx.fillRect(-9,-6,18,12); ctx.restore();
+    ctx.save(); ctx.translate(cx-5, cy+8); ctx.rotate(-0.2); ctx.fillRect(-8,-5,16,10); ctx.restore();
+    ctx.save(); ctx.translate(cx+15, cy+22); ctx.rotate(0.6); ctx.fillRect(-6,-4,12,8); ctx.restore();
+    // Sparkles orbiting
+    for (let i = 0; i < 6; i++) {
+      const angle = (tm / 600 + i * Math.PI * 2 / 6);
+      const dist = 38 + Math.sin(tm / 350 + i) * 8;
+      const sx = cx + Math.cos(angle) * dist;
+      const sy = cy - 22 + Math.sin(angle) * dist * 0.55;
+      const alpha = 0.5 + Math.sin(tm / 200 + i * 1.3) * 0.45;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 }
 
@@ -1357,16 +1428,33 @@ function doHandle() {
 
 function doFeed() {
   if (!gs || !gs.bornAnim) return;
-  if (lizardType === 'crestie') { showMsg(t('feed_crestie_only_cricket')); return; }
   const currentDay = gs.gameDaysPassed;
   if (currentDay - gs.lastFedGameDay < 2) {
     showMsg(t('feed_no')); return;
   }
+  const hasPellet = (gs.pelletCount || 0) >= 1;
+  const hasChicory = lizardType !== 'crestie' && (gs.chicoryStock || 0) >= 1;
+  const hasCricket = (gs.cricketCount || 0) >= 5;
+  if (!hasPellet && !hasChicory && !hasCricket) {
+    showMsg(t('feed_no_food')); return;
+  }
+  let feedMsg;
+  if (hasPellet) {
+    gs.pelletCount -= 1;
+    feedMsg = t('feed_ok_pellet');
+  } else if (hasChicory) {
+    gs.chicoryStock -= 1;
+    feedMsg = t('feed_ok_chicory');
+  } else {
+    gs.cricketCount -= 5;
+    feedMsg = t('feed_ok_cricket');
+  }
   gs.lastFedGameDay = currentDay;
   gs.hunger = Math.min(100, gs.hunger + 40);
   gs.happy = Math.min(100, gs.happy + 10);
-  gs.weight = Math.min(600, gs.weight + 4);
-  showMsg(t('feed_ok'));
+  if (lizardType === 'crestie') gs.weight = Math.min(50, gs.weight + 0.3);
+  else gs.weight = Math.min(600, gs.weight + 4);
+  showMsg(feedMsg);
   saveGame();
 }
 
@@ -1428,14 +1516,18 @@ function gameLoop(ts) {
     // Born animation progression
     if (!gs.bornAnim) {
       bornAnim.timer += dt;
-      if (bornAnim.phase === 0 && bornAnim.timer > 1500) { bornAnim.phase = 1; bornAnim.timer = 0; }
-      else if (bornAnim.phase === 1 && bornAnim.timer > 1200) { bornAnim.phase = 2; bornAnim.timer = 0; }
-      else if (bornAnim.phase === 2 && bornAnim.timer > 1800) {
+      if (bornAnim.phase === 0 && bornAnim.timer > 2200) { bornAnim.phase = 1; bornAnim.timer = 0; }
+      else if (bornAnim.phase === 1 && bornAnim.timer > 1800) { bornAnim.phase = 2; bornAnim.timer = 0; }
+      else if (bornAnim.phase === 2 && bornAnim.timer > 1500) { bornAnim.phase = 3; bornAnim.timer = 0; }
+      else if (bornAnim.phase === 3 && bornAnim.timer > 2500) {
         gs.bornAnim = true;
         lizardAnim.threatening = true;
         if (!gs.introShown) {
           const key = lizardType === 'crestie' ? 'room_intro_crestie' : 'room_intro_blue';
           showMsg(t(key), 4000);
+          if (lizardType === 'bluetongue') {
+            setTimeout(() => showMsg(t('room_intro_blue2'), 3500), 4500);
+          }
           gs.introShown = true;
         }
         saveGame();
@@ -1953,7 +2045,8 @@ function updateFarmUI() {
   document.getElementById('btn-cricket-care').textContent = t('cricket_care_btn');
   document.getElementById('lbl-chicory-stock').textContent = t('chicory_stock_label');
   document.getElementById('lbl-cgestie-food').textContent = t('cgestie_food_label');
-  document.getElementById('btn-cgestie-food-get').textContent = t('cgestie_food_get_btn');
+  const cgestieFoodInSeason = gs && gs.gameDaysPassed <= 44; // May 1 ~ June 14, 2025
+  document.getElementById('btn-cgestie-food-get').textContent = cgestieFoodInSeason ? t('cgestie_food_get_btn') : t('cgestie_food_buy_btn');
   document.getElementById('btn-cgestie-feed-lizard').textContent = t('cgestie_feed_lizard_btn');
   document.getElementById('lbl-bt-food').textContent = t('bt_food_label');
   const btFoodInSeason = gs && gs.gameDaysPassed <= 44; // May 1 ~ June 14, 2025
@@ -2146,8 +2239,25 @@ function doPelletGet() {
 function doCgestieFoodGet() {
   if (!gs) return;
   if ((gs.cgestieFoodCount || 0) >= 10) { showMsg(t('cgestie_food_get_max')); return; }
-  gs.cgestieFoodCount = Math.min(10, (gs.cgestieFoodCount || 0) + 3);
-  showMsg(t('cgestie_food_get_ok'));
+  const inSeason = gs.gameDaysPassed <= 44; // May 1 ~ June 14, 2025
+  if (inSeason) {
+    // Free but 3-game-day cooldown
+    const daysSinceLast = gs.gameDaysPassed - (gs.lastCgestieFoodGetDay || -3);
+    if (daysSinceLast < 3) {
+      const remaining = 3 - daysSinceLast;
+      showMsg(t('cgestie_food_cooldown').replace('{n}', remaining));
+      return;
+    }
+    gs.cgestieFoodCount = Math.min(10, (gs.cgestieFoodCount || 0) + 3);
+    gs.lastCgestieFoodGetDay = gs.gameDaysPassed;
+    showMsg(t('cgestie_food_get_ok'));
+  } else {
+    // After season: buy with 5 coins, no cooldown
+    if (AUTH.getAccountCoins() < 5) { showMsg(t('cgestie_food_buy_no_coins')); return; }
+    AUTH.saveAccountCoins(AUTH.getAccountCoins() - 5);
+    gs.cgestieFoodCount = Math.min(10, (gs.cgestieFoodCount || 0) + 3);
+    showMsg(t('cgestie_food_buy_ok'));
+  }
   saveGame();
   updateFarmUI();
 }
