@@ -18,6 +18,7 @@ let newLizardType = null;  // temp: type selected when adding new lizard
 let newLizardMorph = null; // temp: morph selected when adding new lizard
 let newLizardColor = null; // temp: color selected when adding new lizard (crestie only)
 let newLizardTraits = [];  // temp: traits selected when adding new lizard
+let newLizardCountry = null; // temp: country selected when adding new bluetongue ('australia'|'indonesia')
 let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
 
 // Pixel art colors
@@ -216,6 +217,16 @@ function adjustHex(hex, amt) {
   const r = Math.max(0, Math.min(255, (n >> 16)        + amt));
   const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
   const b = Math.max(0, Math.min(255, (n & 255)        + amt));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
+function blendHex(hex1, hex2, t) {
+  if (!hex1 || hex1[0] !== '#') return hex1;
+  if (!hex2 || hex2[0] !== '#') return hex1;
+  const n1 = parseInt(hex1.slice(1), 16), n2 = parseInt(hex2.slice(1), 16);
+  const r = Math.round(((n1 >> 16) & 255) * (1 - t) + ((n2 >> 16) & 255) * t);
+  const g = Math.round(((n1 >>  8) & 255) * (1 - t) + ((n2 >>  8) & 255) * t);
+  const b = Math.round(( n1        & 255) * (1 - t) + ( n2        & 255) * t);
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
@@ -768,10 +779,10 @@ function drawLeaf(x, y) {
 function drawCrestie(x, y, anim, appearance) {
   const threatening = anim.threatening;
   const s = 3;
-  const morph   = (appearance && appearance.morph)  || 'flame';
   const traits  = (appearance && appearance.traits) || [];
   const colorId = (appearance && appearance.color)  || 'orange';
-  const c = getCrestieColors(colorId, traits);
+  const morph   = (appearance && appearance.morph)  || 'normal';
+  const c = getCrestieColors(colorId, traits, morph);
   const hasXH   = traits.includes('extreme_harlequin');
   const isBold  = traits.includes('bold');
 
@@ -787,7 +798,7 @@ function drawCrestie(x, y, anim, appearance) {
 
   // BODY — slender
   // Tricolor + extreme harlequin: cream is the dominant base color
-  if (colorId === 'tricolor' && hasXH && morph === 'harlequin') {
+  if (colorId === 'tricolor' && hasXH && traits.includes('harlequin')) {
     ctx.fillStyle = '#ddd0a0';  // cream/ivory base
   } else {
     ctx.fillStyle = c.body;
@@ -795,7 +806,7 @@ function drawCrestie(x, y, anim, appearance) {
   ctx.fillRect(x,   y+4*s, 11*s, 5*s);
 
   // Base stripe/ventral (skipped for patternless)
-  if (morph !== 'patternless') {
+  if (!traits.includes('patternless')) {
     ctx.fillStyle = c.stripe;
     ctx.fillRect(x+s, y+4*s, 9*s, s);
     ctx.fillStyle = c.ventral;
@@ -803,11 +814,11 @@ function drawCrestie(x, y, anim, appearance) {
   }
 
   // ── MORPH PATTERNS (drawn before crests so crests sit on top) ──
-  if (morph === 'flame' || morph === 'harlequin') {
+  if (traits.includes('flame') || traits.includes('harlequin')) {
     const darkAmt  = isBold ? -65 : -45;
     const patchDark = adjustHex(c.body, darkAmt);
 
-    if (morph === 'flame') {
+    if (traits.includes('flame')) {
       const patchLight = hasXH ? adjustHex(c.ventral, 40) : c.stripe;
       // Irregular upward-pointing bright patches
       ctx.fillStyle = patchLight;
@@ -871,7 +882,7 @@ function drawCrestie(x, y, anim, appearance) {
     }
   }
 
-  if (morph === 'dalmatian') {
+  if (traits.includes('dalmatian')) {
     const spotColor = adjustHex(c.body, isBold ? -65 : -50);
     ctx.fillStyle = spotColor;
     ctx.fillRect(x+2*s, y+5*s, s, s);
@@ -891,7 +902,7 @@ function drawCrestie(x, y, anim, appearance) {
   }
 
   // DORSAL CRESTS — fan-like spines running from neck down back
-  if (morph === 'pinstripe') {
+  if (traits.includes('pinstripe')) {
     ctx.fillStyle = adjustHex(c.crest, 20);
     ctx.fillRect(x+2*s, y+2*s, 9*s, s);     // top connecting line
     ctx.fillStyle = c.crest;
@@ -1624,6 +1635,7 @@ function confirmName() {
   newLizardMorph = null;
   newLizardColor = null;
   newLizardTraits = [];
+  newLizardCountry = null;
   allLizards.push({ ...newGs });
   activeLizardIdx = allLizards.length - 1;
   gs = newGs;
@@ -1937,7 +1949,7 @@ function updateFarmUI() {
     chicState === 'ready' ? t('chicory_info_ready') + ` ×${chicBatch}` : '';
   document.getElementById('chicory-stock-text').textContent = chicStock;
   // Button enable/disable
-  document.getElementById('btn-chicory-plant').disabled = chicState !== 'none';
+  document.getElementById('btn-chicory-plant').disabled = chicState === 'ready' || (chicState === 'growing' && chicBatch >= 5);
   document.getElementById('btn-chicory-water').disabled = chicState !== 'growing';
   document.getElementById('btn-chicory-harvest').disabled = chicState !== 'ready';
   document.getElementById('btn-chicory-feed-lizard').disabled = chicStock < 1;
@@ -1998,8 +2010,25 @@ function doCricketFeed() {
 
 function doChicoryPlant() {
   if (!gs) return;
+  const inEconomy = gs.gameDaysPassed >= ECONOMY_START_DAYS;
+  if (gs.chicoryState === 'growing') {
+    const cur = gs.chicoryBatchSize || 1;
+    if (cur >= 5) { showMsg(t('chicory_plant_max')); return; }
+    if (inEconomy) {
+      if ((gs.coins || 0) < 3) { showMsg(t('chicory_seed_no_coins')); return; }
+      gs.coins -= 3;
+    }
+    gs.chicoryBatchSize = cur + 1;
+    const msg = inEconomy
+      ? t('chicory_seed_buy_ok').replace('{n}', gs.chicoryBatchSize).replace('{c}', 3)
+      : t('chicory_plant_add_ok').replace('{n}', gs.chicoryBatchSize);
+    showMsg(msg);
+    saveGame();
+    updateFarmUI();
+    return;
+  }
   if (gs.chicoryState !== 'none') { showMsg(t('chicory_plant_already')); return; }
-  if (gs.gameDaysPassed >= ECONOMY_START_DAYS) {
+  if (inEconomy) {
     if ((gs.coins || 0) < 3) { showMsg(t('chicory_seed_no_coins')); return; }
     gs.coins -= 3;
   }
@@ -2008,7 +2037,6 @@ function doChicoryPlant() {
   gs.chicoryWateredDays = 0;
   gs.chicoryLastWateredDay = -1;
   gs.chicoryBatchSize = 1;
-  const inEconomy = gs.gameDaysPassed >= ECONOMY_START_DAYS;
   const msg = inEconomy
     ? t('chicory_seed_buy_ok').replace('{n}', 1).replace('{c}', 3)
     : t('chicory_plant_ok').replace('{n}', 1);
@@ -2336,12 +2364,13 @@ function closeDogram() {
 function showDogramMain() {
   document.getElementById('dogram-main-view').style.display = '';
   document.getElementById('dogram-add-view').style.display = 'none';
+  document.getElementById('dogram-country-view').style.display = 'none';
 }
 
 const ADOPT_COST = 20;
 
 // ─── LIZARD APPEARANCE ──────────────────────────────────────────────────────
-function getCrestieColors(colorId, traits) {
+function getCrestieColors(colorId, traits, morph) {
   traits = traits || [];
   //            [0]body    [1]bodyShd [2]stripe  [3]ventral [4]crest   [5]neck    [6]head    [7]headTip [8]legs    [9]tailTip [10]tailMid
   const P = {
@@ -2361,6 +2390,29 @@ function getCrestieColors(colorId, traits) {
     crest:a[4], neck:a[5], head:a[6], headTip:a[7],
     legs:a[8], tailTip:a[9], tailMid:a[10]
   };
+  // ── MORPH OVERLAYS ──
+  if (morph === 'lilly_white') {
+    // 릴리화이트: 몸 전체가 크림/흰색으로 크게 밝아짐
+    for (const k in c) c[k] = blendHex(c[k], '#f8f4ec', 0.62);
+  } else if (morph === 'cappuccino') {
+    // 카푸치노: 따뜻한 갈색 계열로 이동
+    for (const k in c) c[k] = blendHex(c[k], '#8b5e3c', 0.32);
+  } else if (morph === 'sable') {
+    // 세이블: 탈채색 + 어둡게
+    for (const k in c) {
+      const n = parseInt(c[k].slice(1), 16);
+      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      const avg = Math.round(r * 0.35 + g * 0.50 + b * 0.15);
+      const dr = Math.max(0, Math.min(255, Math.round(r * 0.4 + avg * 0.6) - 18));
+      const dg = Math.max(0, Math.min(255, Math.round(g * 0.4 + avg * 0.6) - 14));
+      const db = Math.max(0, Math.min(255, Math.round(b * 0.4 + avg * 0.6) - 10));
+      c[k] = '#' + ((dr << 16) | (dg << 8) | db).toString(16).padStart(6, '0');
+    }
+  } else if (morph === 'azantic') {
+    // 아잔틱: 차갑고 은빛이 도는 청회색 계열
+    for (const k in c) c[k] = blendHex(c[k], '#9aa4b8', 0.52);
+  }
+  // normal 은 변형 없음
   if (traits.includes('hypo'))        for (const k in c) c[k] = adjustHex(c[k],  50);
   if (traits.includes('melanistic'))  for (const k in c) c[k] = adjustHex(c[k], -60);
   if (traits.includes('high_yellow')) {
@@ -2378,6 +2430,10 @@ function getBluetongueColors(morph, traits) {
   const M = {
     northern:  ['#c0a050','#2c1608','#f0e8c0','#b09848','#c8a058','#a88040','#a88840','#6a7050','#7a8060','#8a9070'],
     eastern:   ['#909040','#201808','#e8e0a8','#807838','#989848','#787830','#887838','#505030','#606040','#707050'],
+    central:   ['#c07030','#1c0c04','#e8d490','#a06028','#b07038','#906828','#a06828','#503010','#603818','#704020'],
+    blotched:  ['#7a8a60','#242010','#d0cca0','#606850','#708060','#505040','#606050','#383828','#484838','#585848'],
+    western:   ['#c0a068','#201408','#ecdcb0','#a08858','#b09068','#908050','#988860','#584828','#685838','#786848'],
+    singleback:['#5a4028','#140c04','#c8bc88','#4a3020','#584030','#402818','#4a3020','#281408','#341c0c','#402410'],
     irian_jaya:['#808078','#181810','#d8d8c0','#686860','#787870','#585850','#686858','#404038','#505048','#606058'],
     merauke:   ['#a07040','#180a00','#d0c890','#906030','#a87848','#887030','#906038','#503010','#603820','#704028'],
     halmahera: ['#2c2818','#100c04','#c8bc80','#201c10','#383018','#484030','#282010','#181408','#201a0c','#302818'],
@@ -2400,11 +2456,15 @@ function getBluetongueColors(morph, traits) {
 }
 
 const LIZARD_MORPHS = {
-  crestie:    ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternless'],
+  crestie:    ['normal', 'lilly_white', 'cappuccino', 'sable', 'azantic', 'choco'],
   bluetongue: ['ajantics']
 };
 const LIZARD_LOCALES = {
   bluetongue: ['northern', 'eastern', 'irian_jaya', 'merauke', 'halmahera']
+};
+const BT_LOCALES_BY_COUNTRY = {
+  australia: ['northern', 'eastern', 'central', 'blotched', 'western', 'singleback'],
+  indonesia: ['irian_jaya', 'merauke', 'halmahera'],
 };
 const LIZARD_COLORS = {
   crestie: [
@@ -2419,7 +2479,7 @@ const LIZARD_COLORS = {
     { id: 'purple',    hex: '#7a3a9a' },
   ]
 };
-const LIZARD_TRAITS = ['high_yellow', 'hypo', 'bold', 'melanistic', 'extreme_harlequin'];
+const LIZARD_TRAITS = ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternless', 'high_yellow', 'hypo', 'bold', 'melanistic', 'extreme_harlequin'];
 
 function showDogramAdd() {
   if ((gs.coins || 0) < ADOPT_COST) {
@@ -2428,6 +2488,7 @@ function showDogramAdd() {
   }
   document.getElementById('dogram-main-view').style.display = 'none';
   document.getElementById('dogram-add-view').style.display = '';
+  document.getElementById('dogram-country-view').style.display = 'none';
   document.getElementById('dogram-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = 'none';
@@ -2448,11 +2509,53 @@ function pickNewLizardType(type) {
   newLizardMorph = null;
   newLizardColor = null;
   newLizardTraits = [];
+  newLizardCountry = null;
+  if (type === 'bluetongue') {
+    showDogramCountry();
+  } else {
+    showDogramColorOrMorph();
+  }
+}
+
+function showDogramCountry() {
+  document.getElementById('dogram-add-view').style.display = 'none';
+  document.getElementById('dogram-country-view').style.display = '';
+  document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-color-view').style.display = 'none';
+  document.getElementById('dogram-trait-view').style.display = 'none';
+  document.getElementById('dogram-main-view').style.display = 'none';
+  document.getElementById('dogram-country-title').textContent = t('dogram_country_title');
+  document.getElementById('dogram-country-subtitle').textContent = t('dogram_country_subtitle');
+  document.getElementById('btn-dogram-country-back').textContent = t('dogram_back');
+
+  const btns = document.getElementById('dogram-country-btns');
+  btns.innerHTML = '';
+  const makeBtn = (id, bg) => {
+    const btn = document.createElement('button');
+    btn.className = 'pixel-btn dogram-type-btn';
+    btn.textContent = t('country_' + id);
+    btn.style.background = bg;
+    btn.style.color = '#fff';
+    btn.onclick = () => pickNewLizardCountry(id);
+    return btn;
+  };
+  btns.appendChild(makeBtn('australia', '#c87030'));
+  btns.appendChild(makeBtn('indonesia', '#3a7a5a'));
+}
+
+function pickNewLizardCountry(country) {
+  newLizardCountry = country;
   showDogramMorph();
+}
+
+function dogramMorphBack() {
+  if (newLizardType === 'bluetongue') showDogramCountry();
+  else showDogramAdd();
 }
 
 function showDogramMorph() {
   document.getElementById('dogram-add-view').style.display = 'none';
+  document.getElementById('dogram-country-view').style.display = 'none';
   document.getElementById('dogram-morph-view').style.display = '';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = 'none';
@@ -2476,8 +2579,8 @@ function showDogramMorph() {
   }
 
   if (isBT) {
-    const locales = LIZARD_LOCALES[newLizardType] || [];
-    const morphs  = LIZARD_MORPHS[newLizardType]  || [];
+    const locales = BT_LOCALES_BY_COUNTRY[newLizardCountry] || [];
+    const morphs  = newLizardCountry === 'indonesia' ? (LIZARD_MORPHS.bluetongue || []) : [];
     if (locales.length) {
       const lbl = document.createElement('div');
       lbl.textContent = t('dogram_locale_title');
@@ -2493,14 +2596,28 @@ function showDogramMorph() {
       morphs.forEach(id => btns.appendChild(makeMorphBtn(id, '#8a6020')));
     }
   } else {
-    (LIZARD_MORPHS[newLizardType] || []).forEach(id => btns.appendChild(makeMorphBtn(id, '#c07020')));
+    const CRESTIE_MORPH_COLORS = {
+      normal:      '#c07020',
+      lilly_white: '#e8e0d0',
+      cappuccino:  '#8b5e3c',
+      sable:       '#5a5248',
+      azantic:     '#7a8aaa',
+    };
+    function makeCrestieMorphBtn(id) {
+      const bg = CRESTIE_MORPH_COLORS[id] || '#c07020';
+      const light = ['lilly_white'].includes(id);
+      const btn = makeMorphBtn(id, bg);
+      btn.style.color = light ? '#3a2a10' : '#fff';
+      return btn;
+    }
+    (LIZARD_MORPHS[newLizardType] || []).forEach(id => btns.appendChild(makeCrestieMorphBtn(id)));
   }
 }
 
 function pickNewLizardMorph(morph) {
   newLizardMorph = morph;
   if (newLizardType === 'crestie') {
-    showDogramColor();
+    showDogramColor(); // 크레스티: 모프 선택 후 컬러 선택
   } else {
     showDogramTrait();
   }
@@ -2534,11 +2651,13 @@ function pickNewLizardColor(colorId) {
 }
 
 function showDogramColorOrMorph() {
-  if (newLizardType === 'crestie') {
-    showDogramColor();
-  } else {
-    showDogramMorph();
-  }
+  // 크레스티: 모프 → 컬러 → 특성 순서
+  showDogramMorph();
+}
+
+function tTrait(trait, lizardType) {
+  const specificKey = 'trait_' + trait + '_' + lizardType;
+  return (T[currentLang] && T[currentLang][specificKey]) || t('trait_' + trait);
 }
 
 function showDogramTrait() {
@@ -2556,7 +2675,7 @@ function showDogramTrait() {
     const btn = document.createElement('button');
     btn.className = 'pixel-btn dogram-type-btn';
     btn.id = 'trait-btn-' + trait;
-    btn.textContent = t('trait_' + trait);
+    btn.textContent = tTrait(trait, newLizardType);
     btn.style.background = '#2a2a4a';
     btn.style.color = '#8888cc';
     btn.onclick = () => toggleLizardTrait(trait);
@@ -2662,7 +2781,7 @@ function renderDogram() {
     const morphText = lizardGs.morph ? t('morph_' + lizardGs.morph) : '';
     const colorText = lizardGs.color ? t('color_' + lizardGs.color) : '';
     const traitsText = (lizardGs.traits && lizardGs.traits.length > 0)
-      ? lizardGs.traits.map(tr => t('trait_' + tr)).join(' · ')
+      ? lizardGs.traits.map(tr => tTrait(tr, lizardGs.type)).join(' · ')
       : '';
     const morphColorLine = [morphText, colorText].filter(Boolean).join(' · ');
     info.innerHTML =

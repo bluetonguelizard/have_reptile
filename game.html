@@ -197,6 +197,18 @@
           <button class="pixel-btn small" id="btn-dogram-back" onclick="showDogramMain()"></button>
         </div>
       </div>
+      <!-- Country view: pick country (bluetongue only) -->
+      <div id="dogram-country-view" style="display:none">
+        <div class="dogram-header">
+          <h2 id="dogram-country-title"></h2>
+          <button class="pixel-btn small red" onclick="closeDogram()">✕</button>
+        </div>
+        <p id="dogram-country-subtitle" style="font-size:7px;color:#aaa;text-align:center;margin-bottom:14px;line-height:1.8;white-space:pre-line"></p>
+        <div class="dogram-type-btns" id="dogram-country-btns"></div>
+        <div style="text-align:center;margin-top:12px">
+          <button class="pixel-btn small" id="btn-dogram-country-back" onclick="showDogramAdd()"></button>
+        </div>
+      </div>
       <!-- Morph view: pick morph -->
       <div id="dogram-morph-view" style="display:none">
         <div class="dogram-header">
@@ -206,7 +218,7 @@
         <p id="dogram-morph-subtitle" style="font-size:7px;color:#aaa;text-align:center;margin-bottom:14px;line-height:1.8;white-space:pre-line"></p>
         <div class="dogram-type-btns" id="dogram-morph-btns"></div>
         <div style="text-align:center;margin-top:12px">
-          <button class="pixel-btn small" id="btn-dogram-morph-back" onclick="showDogramAdd()"></button>
+          <button class="pixel-btn small" id="btn-dogram-morph-back" onclick="dogramMorphBack()"></button>
         </div>
       </div>
       <!-- Color view: pick color (crestie only) -->
