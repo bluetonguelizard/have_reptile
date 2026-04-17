@@ -1092,12 +1092,14 @@ function drawBluetongue(x, y, anim, appearance) {
   ctx.fillRect(x, y+3*s, 15*s, 8*s);
 
   // DARK CROSSBANDS — very prominent, key bluetongue identifier
+  if (morph !== 'patternless') {
   ctx.fillStyle = c.crossband;
   const bw = morph === 'eastern' ? s : 2*s;   // narrower for eastern
   ctx.fillRect(x+s,    y+3*s, bw, 8*s);
   ctx.fillRect(x+5*s,  y+3*s, bw, 8*s);
   ctx.fillRect(x+9*s,  y+3*s, bw, 8*s);
   ctx.fillRect(x+13*s, y+3*s, bw, 8*s);
+  }
 
   // Irian Jaya: fade upper halves of some bands (reduced pattern)
   if (morph === 'irian_jaya') {
@@ -1159,6 +1161,18 @@ function drawBluetongue(x, y, anim, appearance) {
     ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
     ctx.fillStyle = '#000000';
     ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
+  } else if (morph === 'albino') {
+    // Pink/red eye for albino
+    ctx.fillStyle = '#e08090';
+    ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+    ctx.fillStyle = '#cc6070';
+    ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
+    ctx.fillStyle = '#ff3050';
+    ctx.fillRect(x+20*s, y+4*s, 3*s, 3*s);
+    ctx.fillStyle = C.black;
+    ctx.fillRect(x+20*s, y+4*s, 2*s, 2*s);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x+21*s, y+4*s, s,   s  );
   } else {
     ctx.fillStyle = '#3a2800';
     ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
@@ -1204,6 +1218,11 @@ function drawBluetongue(x, y, anim, appearance) {
       ctx.fillStyle = '#080808';
       ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
       ctx.fillStyle = '#000000';
+      ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);
+    } else if (morph === 'albino') {
+      ctx.fillStyle = '#e08090';
+      ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+      ctx.fillStyle = '#cc6070';
       ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);
     } else {
       ctx.fillStyle = '#3a2800';
@@ -2437,7 +2456,13 @@ function getBluetongueColors(morph, traits) {
     irian_jaya:['#808078','#181810','#d8d8c0','#686860','#787870','#585850','#686858','#404038','#505048','#606058'],
     merauke:   ['#a07040','#180a00','#d0c890','#906030','#a87848','#887030','#906038','#503010','#603820','#704028'],
     halmahera: ['#2c2818','#100c04','#c8bc80','#201c10','#383018','#484030','#282010','#181408','#201a0c','#302818'],
-    ajantics:  ['#262830','#0c0c10','#d0d0d4','#181820','#bec0c4','#cecece','#202028','#0e0e12','#181820','#24242c'],
+    tanimbar:  ['#b08850','#200e00','#e8d898','#987040','#a87848','#906038','#985830','#582800','#683810','#784820'],
+    kei_island:['#6a8870','#0c1810','#c8dcc0','#4a6850','#587860','#4a6850','#3a5840','#182818','#283828','#384840'],
+    ajantics:    ['#262830','#0c0c10','#d0d0d4','#181820','#bec0c4','#cecece','#202028','#0e0e12','#181820','#24242c'],
+    patternless: ['#a89870','#a89870','#e8d898','#887860','#908070','#a89870','#807050','#605840','#706850','#806858'],
+    melanistic:  ['#181810','#0c0c08','#484840','#101008','#1c1c14','#282820','#161610','#080808','#100c08','#181810'],
+    amelanistic: ['#d89030','#c87020','#f0e498','#b07020','#c07828','#d08838','#b06018','#884800','#985010','#a86020'],
+    albino:      ['#e8e0c0','#ccc4a0','#f8f4e0','#d0c8a8','#dcd4b8','#eae4c8','#c8c0a0','#b0a888','#b8b090','#c8c0a0'],
   };
   const a = M[morph] || M.northern;
   let c = {
@@ -2457,14 +2482,18 @@ function getBluetongueColors(morph, traits) {
 
 const LIZARD_MORPHS = {
   crestie:    ['normal', 'lilly_white', 'cappuccino', 'sable', 'azantic', 'choco'],
-  bluetongue: ['ajantics']
+  bluetongue: ['ajantics', 'patternless', 'melanistic', 'amelanistic', 'albino']
+};
+const BT_MORPHS_BY_COUNTRY = {
+  australia: ['hypo', 'caramel', 'leucistic', 'melanistic'],
+  indonesia: ['ajantics', 'patternless', 'melanistic', 'amelanistic', 'albino'],
 };
 const LIZARD_LOCALES = {
-  bluetongue: ['northern', 'eastern', 'irian_jaya', 'merauke', 'halmahera']
+  bluetongue: ['northern', 'eastern', 'irian_jaya', 'merauke', 'halmahera', 'tanimbar', 'kei_island']
 };
 const BT_LOCALES_BY_COUNTRY = {
   australia: ['northern', 'eastern', 'central', 'blotched', 'western', 'singleback'],
-  indonesia: ['irian_jaya', 'merauke', 'halmahera'],
+  indonesia: ['halmahera', 'merauke', 'irian_jaya', 'tanimbar', 'kei_island'],
 };
 const LIZARD_COLORS = {
   crestie: [
@@ -2580,7 +2609,7 @@ function showDogramMorph() {
 
   if (isBT) {
     const locales = BT_LOCALES_BY_COUNTRY[newLizardCountry] || [];
-    const morphs  = newLizardCountry === 'indonesia' ? (LIZARD_MORPHS.bluetongue || []) : [];
+    const morphs = BT_MORPHS_BY_COUNTRY[newLizardCountry] || [];
     if (locales.length) {
       const lbl = document.createElement('div');
       lbl.textContent = t('dogram_locale_title');
@@ -2593,7 +2622,22 @@ function showDogramMorph() {
       lbl.textContent = t('dogram_morph_title');
       lbl.style.cssText = 'font-size:7px;color:#c8a860;margin:8px 0 4px;text-align:center;';
       btns.appendChild(lbl);
-      morphs.forEach(id => btns.appendChild(makeMorphBtn(id, '#8a6020')));
+      const BT_MORPH_COLORS = {
+        hypo:        '#d4a860',
+        caramel:     '#c87830',
+        leucistic:   '#e8e4d8',
+        melanistic:  '#181810',
+        patternless: '#a89870',
+        amelanistic: '#d89030',
+        albino:      '#dcd4b8',
+      };
+      const BT_MORPH_LIGHT = ['hypo', 'leucistic', 'patternless', 'albino', 'caramel'];
+      morphs.forEach(id => {
+        const bg = BT_MORPH_COLORS[id] || '#8a6020';
+        const btn = makeMorphBtn(id, bg);
+        btn.style.color = BT_MORPH_LIGHT.includes(id) ? '#3a2a10' : '#fff';
+        btns.appendChild(btn);
+      });
     }
   } else {
     const CRESTIE_MORPH_COLORS = {

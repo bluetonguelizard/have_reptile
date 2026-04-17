@@ -22,6 +22,7 @@
   <button class="pixel-btn small" id="btn-nav-home" onclick="doGoHome()">홈</button>
   <button class="pixel-btn small red" id="btn-nav-logout" onclick="doLogout()">로그아웃</button>
   <button class="pixel-btn small" id="btn-nav-dogram" onclick="openDogram()" style="display:none;background:#6a3a8a;color:#e0c0ff"></button>
+  <button class="pixel-btn small" id="btn-nav-data" onclick="openDataModal()" style="background:#2a5a4a;color:#a0e8c8"></button>
 </div>
 
 <div id="game-container">
@@ -249,6 +250,22 @@
     </div>
   </div>
 
+  <!-- Data transfer modal -->
+  <div id="data-modal" style="display:none">
+    <div class="modal-panel" style="max-width:320px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 id="data-title" style="margin-bottom:0"></h2>
+        <button class="pixel-btn small red" onclick="closeDataModal()">✕</button>
+      </div>
+      <p style="font-size:7px;color:#aaa;margin-bottom:18px;line-height:1.8">모바일 ↔ PC 간 데이터를 옮길 때 사용하세요.</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="pixel-btn small" id="btn-data-export" onclick="doDataExport()" style="background:#2a5a4a;color:#a0e8c8"></button>
+        <button class="pixel-btn small" id="btn-data-import" onclick="document.getElementById('data-file-input').click()" style="background:#3a4a6a;color:#a0c8f0"></button>
+        <input type="file" id="data-file-input" accept=".json" style="display:none" onchange="doDataImport(event)">
+      </div>
+    </div>
+  </div>
+
   <!-- Name modal -->
   <div id="name-modal" style="display:none">
     <div class="modal-panel">
@@ -286,11 +303,68 @@ function updateGameLabels() {
   document.getElementById('btn-nav-home').textContent = t('home_btn');
   document.getElementById('btn-nav-logout').textContent = t('logout');
   document.getElementById('btn-nav-dogram').textContent = t('dogram_btn');
+  document.getElementById('btn-nav-data').textContent = t('data_btn');
+  document.getElementById('data-title').textContent = t('data_title');
+  document.getElementById('btn-data-export').textContent = t('data_export');
+  document.getElementById('btn-data-import').textContent = t('data_import');
   document.getElementById('btn-sleep').textContent = t('sleep_btn');
   document.getElementById('btn-farm').textContent = t('farm_btn');
   document.getElementById('btn-leave-outdoor').textContent = t('dandelion_complete_btn');
   if (document.getElementById('farm-modal').style.display !== 'none') updateFarmUI();
   if (outdoorState) updateOutdoorCounter();
+}
+
+function openDataModal() {
+  document.getElementById('data-modal').style.display = 'flex';
+}
+
+function closeDataModal() {
+  document.getElementById('data-modal').style.display = 'none';
+}
+
+function doDataExport() {
+  const username = localStorage.getItem('tgs_current');
+  if (!username) return;
+  const users = AUTH.getUsers();
+  const userData = users[username];
+  if (!userData) return;
+  const exportData = { username, userData };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `have_lizard_${username}_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function doDataImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!confirm(t('data_import_warn'))) {
+    event.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const importData = JSON.parse(e.target.result);
+      if (!importData.username || !importData.userData) throw new Error('invalid');
+      const username = localStorage.getItem('tgs_current');
+      if (!username) throw new Error('not logged in');
+      const users = AUTH.getUsers();
+      // 비밀번호는 현재 계정 것을 유지
+      const currentPassword = users[username] ? users[username].password : importData.userData.password;
+      users[username] = { ...importData.userData, password: currentPassword };
+      AUTH.saveUsers(users);
+      alert(t('data_import_ok'));
+      location.reload();
+    } catch(err) {
+      alert(t('data_import_fail'));
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 function doGoHome() {
