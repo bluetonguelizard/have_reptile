@@ -73,10 +73,11 @@ function newGameState(type) {
     chicoryBatchSize: 1,
     pelletCount: 0,
     cgestieFoodCount: 0,
+    btFoodCount: 0,
+    lastBtFoodGetDay: -3,
     dandelionStock: 0,
     lastDandelionGatherDay: -1,
     springNotifiedYear: 0,
-    coins: 0,
   };
 }
 
@@ -92,8 +93,17 @@ function loadGame() {
     lizardType = gs.type || null;
     scene = gs.scene || SCENE.SHOP;
     updateGameTime();
-    // Persist migration
+    // Persist migration: old single-lizard format
     if (!user.lizards) AUTH.saveAllLizards(allLizards, activeLizardIdx);
+    // Migration: merge per-lizard coins into account coins
+    const hasCoinInLizards = allLizards.some(l => typeof l.coins === 'number' && l.coins > 0);
+    if (hasCoinInLizards && !user.coins) {
+      const total = allLizards.reduce((sum, l) => sum + (l.coins || 0), 0);
+      AUTH.saveAccountCoins(total);
+      allLizards.forEach(l => { delete l.coins; });
+      AUTH.saveAllLizards(allLizards, activeLizardIdx);
+      delete gs.coins;
+    }
   } else {
     gs = null;
     scene = SCENE.SHOP;
@@ -111,7 +121,7 @@ function saveGame() {
 }
 
 // ─── SLEEP HELPERS ───────────────────────────────────────────────────────────
-function isSleepyHour() { const h = new Date().getHours(); return h >= 21; }
+function isSleepyHour() { const h = new Date().getHours(); return h >= 21 || h < 6; }
 function isWakeHour()   { const h = new Date().getHours(); return h >= 6 && h < 21; }
 
 // ─── TIME ───────────────────────────────────────────────────────────────────
@@ -1570,18 +1580,30 @@ canvas_click = function(e) {
   const W = canvas.width, H = canvas.height;
 
   if (scene === SCENE.OUTDOOR && outdoorState) {
+    // Check bugs first — penalty on hit
+    for (const bug of outdoorState.bugs) {
+      if (Math.hypot(mx - bug.x, my - bug.y) < 18) {
+        outdoorState.startTime -= 3000; // costs 3 seconds
+        outdoorState.penaltyEndTime = Date.now() + 700;
+        return;
+      }
+    }
+    // Check dandelions
     for (const d of outdoorState.dandelions) {
-      if (d.picked) continue;
+      if (d.picked || d.gone) continue;
       const fy = d.y - 41; // flower center
       const dist = Math.hypot(mx - d.x, my - fy);
       if (dist < 22) {
         d.picked = true;
         outdoorState.gathered++;
         updateOutdoorCounter();
-        // If stock would be full now, auto-leave
+        // Stock full → auto-leave
         if ((gs.dandelionStock || 0) + outdoorState.gathered >= 10) {
           showMsg(t('dandelion_stock_max'));
-          setTimeout(leaveOutdoor, 1000);
+          setTimeout(leaveOutdoor, 900);
+        // All picked → auto-leave
+        } else if (outdoorState.dandelions.every(d2 => d2.picked || d2.gone)) {
+          setTimeout(leaveOutdoor, 600);
         }
         break;
       }
@@ -1933,12 +1955,16 @@ function updateFarmUI() {
   document.getElementById('lbl-cgestie-food').textContent = t('cgestie_food_label');
   document.getElementById('btn-cgestie-food-get').textContent = t('cgestie_food_get_btn');
   document.getElementById('btn-cgestie-feed-lizard').textContent = t('cgestie_feed_lizard_btn');
+  document.getElementById('lbl-bt-food').textContent = t('bt_food_label');
+  const btFoodInSeason = gs && gs.gameDaysPassed <= 44; // May 1 ~ June 14, 2025
+  document.getElementById('btn-bt-food-get').textContent = btFoodInSeason ? t('bt_food_get_btn') : t('bt_food_buy_btn');
+  document.getElementById('btn-bt-feed-lizard').textContent = t('bt_feed_lizard_btn');
   document.getElementById('lbl-dandelion-stock').textContent = t('dandelion_stock_label');
   document.getElementById('btn-dandelion-gather').textContent = t('dandelion_gather_btn');
   document.getElementById('btn-dandelion-feed-lizard').textContent = t('dandelion_feed_lizard_btn');
   document.getElementById('btn-sell-dandelion').textContent = t('sell_dandelion_btn');
   document.getElementById('btn-sell-chicory').textContent = t('sell_chicory_btn');
-  document.getElementById('coin-display').textContent = t('coin_label') + ': ' + (gs ? (gs.coins || 0) : 0);
+  document.getElementById('coin-display').textContent = t('coin_label') + ': ' + AUTH.getAccountCoins();
   // Cricket stats
   const count = gs ? (gs.cricketCount || 0) : 0;
   document.getElementById('bar-cricket').style.width = (count / 150 * 100) + '%';
@@ -1977,6 +2003,11 @@ function updateFarmUI() {
   document.getElementById('bar-cgestie-food').style.width = (cgestieFood / 10 * 100) + '%';
   document.getElementById('cgestie-food-count-text').textContent = cgestieFood + ' / 10';
   document.getElementById('btn-cgestie-feed-lizard').disabled = cgestieFood < 1;
+  // BT food stats
+  const btFood = gs ? (gs.btFoodCount || 0) : 0;
+  document.getElementById('bar-bt-food').style.width = (btFood / 10 * 100) + '%';
+  document.getElementById('bt-food-count-text').textContent = btFood + ' / 10';
+  document.getElementById('btn-bt-feed-lizard').disabled = btFood < 1;
   // Dandelion stats
   const dandelionStock = gs ? (gs.dandelionStock || 0) : 0;
   const gameMonth = gs ? getGameDate().month : 0;
@@ -2001,8 +2032,8 @@ function doCricketGet() {
   if (!gs) return;
   if ((gs.cricketCount || 0) >= 150) { showMsg(t('cricket_get_max')); return; }
   if (gs.gameDaysPassed >= ECONOMY_START_DAYS) {
-    if ((gs.coins || 0) < 5) { showMsg(t('cricket_buy_no_coins')); return; }
-    gs.coins -= 5;
+    if (AUTH.getAccountCoins() < 5) { showMsg(t('cricket_buy_no_coins')); return; }
+    AUTH.saveAccountCoins(AUTH.getAccountCoins() - 5);
   }
   gs.cricketCount = Math.min(150, (gs.cricketCount || 0) + 20);
   gs.lastCricketBreedDay = gs.gameDaysPassed;
@@ -2034,8 +2065,8 @@ function doChicoryPlant() {
     const cur = gs.chicoryBatchSize || 1;
     if (cur >= 5) { showMsg(t('chicory_plant_max')); return; }
     if (inEconomy) {
-      if ((gs.coins || 0) < 3) { showMsg(t('chicory_seed_no_coins')); return; }
-      gs.coins -= 3;
+      if (AUTH.getAccountCoins() < 3) { showMsg(t('chicory_seed_no_coins')); return; }
+      AUTH.saveAccountCoins(AUTH.getAccountCoins() - 3);
     }
     gs.chicoryBatchSize = cur + 1;
     const msg = inEconomy
@@ -2048,8 +2079,8 @@ function doChicoryPlant() {
   }
   if (gs.chicoryState !== 'none') { showMsg(t('chicory_plant_already')); return; }
   if (inEconomy) {
-    if ((gs.coins || 0) < 3) { showMsg(t('chicory_seed_no_coins')); return; }
-    gs.coins -= 3;
+    if (AUTH.getAccountCoins() < 3) { showMsg(t('chicory_seed_no_coins')); return; }
+    AUTH.saveAccountCoins(AUTH.getAccountCoins() - 3);
   }
   gs.chicoryState = 'growing';
   gs.chicoryPlantedDay = gs.gameDaysPassed;
@@ -2136,6 +2167,47 @@ function doCgestieFeedLizard() {
   closeFarm();
 }
 
+function doBtFoodGet() {
+  if (!gs) return;
+  if ((gs.btFoodCount || 0) >= 10) { showMsg(t('bt_food_get_max')); return; }
+  const inSeason = gs.gameDaysPassed <= 44; // May 1 ~ June 14, 2025
+  if (inSeason) {
+    // Free but 3-game-day cooldown
+    const daysSinceLast = gs.gameDaysPassed - (gs.lastBtFoodGetDay || -3);
+    if (daysSinceLast < 3) {
+      const remaining = 3 - daysSinceLast;
+      showMsg(t('bt_food_cooldown').replace('{n}', remaining));
+      return;
+    }
+    gs.btFoodCount = Math.min(10, (gs.btFoodCount || 0) + 3);
+    gs.lastBtFoodGetDay = gs.gameDaysPassed;
+    showMsg(t('bt_food_get_ok'));
+  } else {
+    // After season: buy with 5 coins, no cooldown
+    if (AUTH.getAccountCoins() < 5) { showMsg(t('bt_food_buy_no_coins')); return; }
+    AUTH.saveAccountCoins(AUTH.getAccountCoins() - 5);
+    gs.btFoodCount = Math.min(10, (gs.btFoodCount || 0) + 3);
+    showMsg(t('bt_food_buy_ok'));
+  }
+  saveGame();
+  updateFarmUI();
+}
+
+function doBtFeedLizard() {
+  if (!gs || !gs.bornAnim) return;
+  if (lizardType !== 'bluetongue') { showMsg(t('bt_food_crestie_no')); return; }
+  if ((gs.btFoodCount || 0) < 1) { showMsg(t('bt_food_none')); return; }
+  if (gs.gameDaysPassed - gs.lastFedGameDay < 2) { showMsg(t('cricket_feed_no')); return; }
+  gs.btFoodCount -= 1;
+  gs.lastFedGameDay = gs.gameDaysPassed;
+  gs.hunger = Math.min(100, gs.hunger + 45);
+  gs.happy = Math.min(100, gs.happy + 12);
+  gs.weight = Math.min(600, gs.weight + 4);
+  showMsg(t('bt_food_feed_ok'));
+  saveGame();
+  closeFarm();
+}
+
 function seededRand(s) {
   const x = Math.sin(s * 9301 + 49297) * 233280;
   return x - Math.floor(x);
@@ -2146,12 +2218,31 @@ function initOutdoorScene() {
   const groundY = H * 0.52;
   const seed = gs ? gs.gameDaysPassed : 0;
   const dandelions = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     const x = Math.round(W * 0.1 + seededRand(seed + i * 13) * W * 0.8);
-    const y = Math.round(groundY + 55 + seededRand(seed + i * 17 + 100) * (H - groundY - 90));
-    dandelions.push({ x, y, picked: false });
+    const y = Math.round(groundY + 52 + seededRand(seed + i * 17 + 100) * (H - groundY - 85));
+    dandelions.push({ x, y, picked: false, gone: false });
   }
-  outdoorState = { dandelions, gathered: 0 };
+  // Animated bugs (ladybugs)
+  const bugs = [];
+  for (let i = 0; i < 2; i++) {
+    bugs.push({
+      x: W * (0.2 + i * 0.55),
+      y: groundY + 55 + i * 35,
+      vx: (seededRand(seed + i * 99 + 7) > 0.5 ? 1 : -1) * (52 + seededRand(seed + i * 77) * 38),
+      vy: (seededRand(seed + i * 88 + 3) > 0.5 ? 1 : -1) * (32 + seededRand(seed + i * 66) * 24),
+    });
+  }
+  outdoorState = {
+    dandelions,
+    bugs,
+    gathered: 0,
+    startTime: Date.now(),
+    duration: 22,
+    lastUpdateTime: Date.now(),
+    penaltyEndTime: 0,
+    wiltWarned: false,
+  };
   updateOutdoorCounter();
 }
 
@@ -2160,10 +2251,15 @@ function updateOutdoorCounter() {
   if (!el || !outdoorState) return;
   const total = outdoorState.dandelions.length;
   const picked = outdoorState.dandelions.filter(d => d.picked).length;
-  el.textContent = t('dandelion_outdoor_counter').replace('{n}', picked).replace('{t}', total);
+  const gone = outdoorState.dandelions.filter(d => d.gone && !d.picked).length;
+  const label = gone > 0
+    ? t('dandelion_outdoor_counter').replace('{n}', picked).replace('{t}', total) + ' (-' + gone + ')'
+    : t('dandelion_outdoor_counter').replace('{n}', picked).replace('{t}', total);
+  el.textContent = label;
 }
 
-function drawDandelionFlower(x, y, picked) {
+function drawDandelionFlower(x, y, picked, wiltLevel) {
+  wiltLevel = wiltLevel || 0;
   const stemH = 32;
   const fy = y - stemH - 9; // flower center y
 
@@ -2177,40 +2273,111 @@ function drawDandelionFlower(x, y, picked) {
     return;
   }
 
+  ctx.save();
+  if (wiltLevel > 0) ctx.globalAlpha = 1 - wiltLevel * 0.5;
+
   // Stem
-  ctx.fillStyle = '#3a7a1a';
+  ctx.fillStyle = wiltLevel > 0 ? '#7a8a20' : '#3a7a1a';
   ctx.fillRect(x - 1, y - stemH, 2, stemH);
 
   // Leaves
-  ctx.fillStyle = '#4a9a2a';
-  ctx.save(); ctx.translate(x - 5, y - 14); ctx.rotate(-0.5);
+  ctx.fillStyle = wiltLevel > 0 ? '#8aaa28' : '#4a9a2a';
+  ctx.save(); ctx.translate(x - 5, y - 14); ctx.rotate(-0.5 + wiltLevel * 0.4);
   ctx.beginPath(); ctx.ellipse(0, 0, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  ctx.save(); ctx.translate(x + 5, y - 9); ctx.rotate(0.5);
+  ctx.save(); ctx.translate(x + 5, y - 9); ctx.rotate(0.5 - wiltLevel * 0.4);
   ctx.beginPath(); ctx.ellipse(0, 0, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // Petals
-  ctx.fillStyle = '#f8d030';
+  // Petals (shrink when wilted)
+  const ps = 1 - wiltLevel * 0.45; // petal scale
+  const pr = 12 * (1 - wiltLevel * 0.3); // petal orbit radius
+  ctx.fillStyle = wiltLevel > 0
+    ? `rgb(${Math.round(200 + 28 * wiltLevel)},${Math.round(160 - 60 * wiltLevel)},20)`
+    : '#f8d030';
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
-    const petalX = x + Math.cos(angle) * 12;
-    const petalY = fy + Math.sin(angle) * 12;
+    const petalX = x + Math.cos(angle) * pr;
+    const petalY = fy + Math.sin(angle) * pr;
     ctx.save(); ctx.translate(petalX, petalY); ctx.rotate(angle);
-    ctx.beginPath(); ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, 6 * ps, 3 * ps, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
   // Center
-  ctx.fillStyle = '#e87820';
-  ctx.beginPath(); ctx.arc(x, fy, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f8b040';
+  const cr = 7 * (1 - wiltLevel * 0.3);
+  ctx.fillStyle = wiltLevel > 0 ? '#a05010' : '#e87820';
+  ctx.beginPath(); ctx.arc(x, fy, cr, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = wiltLevel > 0 ? '#c07030' : '#f8b040';
   ctx.beginPath(); ctx.arc(x - 1, fy - 1, 3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawBug(x, y) {
+  const frame = Math.floor(Date.now() / 200) % 2;
+  // Body (ladybug red)
+  ctx.fillStyle = '#cc2a08';
+  ctx.beginPath(); ctx.ellipse(x, y, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+  // Wing divider
+  ctx.strokeStyle = '#1a0800';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.stroke();
+  // Spots
+  ctx.fillStyle = '#1a0800';
+  ctx.beginPath(); ctx.arc(x - 2.5, y - 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 3, y + 1, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - 1, y + 2.5, 1.2, 0, Math.PI * 2); ctx.fill();
+  // Head
+  ctx.fillStyle = '#1a0800';
+  ctx.beginPath(); ctx.arc(x, y - 6, 3, 0, Math.PI * 2); ctx.fill();
+  // Antennae
+  ctx.strokeStyle = '#1a0800';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x - 1, y - 8); ctx.lineTo(x - 5, y - 13); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + 1, y - 8); ctx.lineTo(x + 5, y - 13); ctx.stroke();
+  // Animated legs
+  const legOff = frame === 0 ? 2 : -2;
+  ctx.strokeStyle = '#2a1000';
+  for (const s of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(x + s * 6, y - 2); ctx.lineTo(x + s * 11, y - 3 + legOff); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + s * 6, y + 1); ctx.lineTo(x + s * 11, y + legOff); ctx.stroke();
+  }
 }
 
 function drawOutdoor() {
   const W = canvas.width, H = canvas.height;
   const skyH = H * 0.52;
+
+  // === OUTDOOR GAME LOGIC ===
+  let elapsed = 0, timeLeft = 999;
+  if (outdoorState) {
+    const now = Date.now();
+    elapsed = (now - outdoorState.startTime) / 1000;
+    timeLeft = Math.max(0, outdoorState.duration - elapsed);
+
+    // Auto-leave when time's up
+    if (timeLeft <= 0) { leaveOutdoor(); return; }
+
+    // Wilt warning at 8s remaining
+    if (timeLeft <= 8 && !outdoorState.wiltWarned) {
+      outdoorState.wiltWarned = true;
+      showMsg(t('dandelion_wilt_warning'));
+    }
+
+    // Update bug positions
+    const dtBug = Math.min((now - outdoorState.lastUpdateTime) / 1000, 0.05);
+    outdoorState.lastUpdateTime = now;
+    const groundY = H * 0.52;
+    for (const bug of outdoorState.bugs) {
+      bug.x += bug.vx * dtBug;
+      bug.y += bug.vy * dtBug;
+      if (bug.x < 15)       { bug.x = 15;       bug.vx =  Math.abs(bug.vx); }
+      if (bug.x > W - 15)   { bug.x = W - 15;   bug.vx = -Math.abs(bug.vx); }
+      if (bug.y < groundY + 12) { bug.y = groundY + 12; bug.vy =  Math.abs(bug.vy); }
+      if (bug.y > H - 20)   { bug.y = H - 20;   bug.vy = -Math.abs(bug.vy); }
+    }
+  }
 
   // Sky
   const skyGrad = ctx.createLinearGradient(0, 0, 0, skyH);
@@ -2266,19 +2433,59 @@ function drawOutdoor() {
   ctx.fillStyle = '#2a6820';
   ctx.beginPath(); ctx.arc(W*0.91, skyH - H*0.08, W*0.055, 0, Math.PI*2); ctx.fill();
 
-  // Dandelions
+  // Dandelions (with wilt effect)
   if (outdoorState) {
-    for (const d of outdoorState.dandelions) drawDandelionFlower(d.x, d.y, d.picked);
+    const wiltStart = outdoorState.duration - 8;  // wilt begins at 8s remaining
+    for (const d of outdoorState.dandelions) {
+      if (d.gone) continue;
+      let wiltLevel = 0;
+      if (elapsed > wiltStart) wiltLevel = Math.min(1, (elapsed - wiltStart) / 6);
+      drawDandelionFlower(d.x, d.y, d.picked, wiltLevel);
+    }
   }
 
-  // Tap hint (if not all picked)
-  if (outdoorState && outdoorState.dandelions.some(d => !d.picked)) {
+  // Bugs
+  if (outdoorState) {
+    for (const bug of outdoorState.bugs) drawBug(bug.x, bug.y);
+  }
+
+  // Timer bar
+  if (outdoorState) {
+    const timerFrac = Math.max(0, timeLeft / outdoorState.duration);
+    const barW = W * 0.62;
+    const barX = W * 0.19;
+    const barY = 10;
+    const barH = 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+    ctx.fillStyle = timeLeft > 10 ? '#4adb4a' : timeLeft > 5 ? '#f8c040' : '#f84040';
+    ctx.fillRect(barX, barY, barW * timerFrac, barH);
+    ctx.fillStyle = '#fff';
+    ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.ceil(timeLeft) + 's', W / 2, barY + barH + 14);
+    ctx.textAlign = 'left';
+  }
+
+  // Tap hint (if dandelions remain)
+  if (outdoorState && outdoorState.dandelions.some(d => !d.picked && !d.gone)) {
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(W/2 - 100, H - 28, 200, 22);
+    ctx.fillRect(W / 2 - 110, H - 28, 220, 22);
     ctx.fillStyle = '#c8e84a';
     ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
     ctx.textAlign = 'center';
-    ctx.fillText(t('dandelion_tap_hint'), W/2, H - 13);
+    ctx.fillText(t('dandelion_tap_hint_bug'), W / 2, H - 13);
+    ctx.textAlign = 'left';
+  }
+
+  // Penalty flash
+  if (outdoorState && Date.now() < outdoorState.penaltyEndTime) {
+    ctx.fillStyle = 'rgba(255,30,0,0.28)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ff5533';
+    ctx.font = "11px 'Press Start 2P', Galmuri11, monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText(t('dandelion_bug_penalty'), W / 2, H * 0.44);
     ctx.textAlign = 'left';
   }
 }
@@ -2328,7 +2535,7 @@ function doSellDandelion() {
   if (stock < 1) { showMsg(t('sell_none_dandelion')); return; }
   const earned = stock * 2;
   gs.dandelionStock = 0;
-  gs.coins = (gs.coins || 0) + earned;
+  AUTH.saveAccountCoins(AUTH.getAccountCoins() + earned);
   showMsg(t('sell_dandelion_ok').replace('{n}', stock).replace('{c}', earned));
   saveGame();
   updateFarmUI();
@@ -2340,7 +2547,7 @@ function doSellChicory() {
   if (stock < 1) { showMsg(t('sell_none_chicory')); return; }
   const earned = stock * 5;
   gs.chicoryStock = 0;
-  gs.coins = (gs.coins || 0) + earned;
+  AUTH.saveAccountCoins(AUTH.getAccountCoins() + earned);
   showMsg(t('sell_chicory_ok').replace('{n}', stock).replace('{c}', earned));
   saveGame();
   updateFarmUI();
@@ -2511,7 +2718,7 @@ const LIZARD_COLORS = {
 const LIZARD_TRAITS = ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternless', 'high_yellow', 'hypo', 'bold', 'melanistic', 'extreme_harlequin'];
 
 function showDogramAdd() {
-  if ((gs.coins || 0) < ADOPT_COST) {
+  if (AUTH.getAccountCoins() < ADOPT_COST) {
     showMsg(t('dogram_no_coins'));
     return;
   }
@@ -2529,7 +2736,7 @@ function showDogramAdd() {
 }
 
 function pickNewLizardType(type) {
-  if ((gs.coins || 0) < ADOPT_COST) {
+  if (AUTH.getAccountCoins() < ADOPT_COST) {
     showMsg(t('dogram_no_coins'));
     closeDogram();
     return;
@@ -2741,12 +2948,12 @@ function toggleLizardTrait(trait) {
 }
 
 function confirmNewLizardTraits() {
-  if ((gs.coins || 0) < ADOPT_COST) {
+  if (AUTH.getAccountCoins() < ADOPT_COST) {
     showMsg(t('dogram_no_coins'));
     closeDogram();
     return;
   }
-  gs.coins -= ADOPT_COST;
+  AUTH.saveAccountCoins(AUTH.getAccountCoins() - ADOPT_COST);
   closeDogram();
   document.getElementById('name-modal').style.display = 'flex';
   document.getElementById('modal-title').textContent = t('name_title');

@@ -113,7 +113,7 @@
           <button class="pixel-btn small blue" id="btn-cricket-feed" onclick="doCricketFeed()"></button>
         </div>
       </div>
-      <!-- Crestie food panel -->
+      <!-- Food panel (crestie + bluetongue) -->
       <div id="farm-cgestie-panel" style="display:none">
         <div class="farm-stat-row">
           <span class="stat-label" id="lbl-cgestie-food"></span>
@@ -123,6 +123,17 @@
         <div class="farm-btns">
           <button class="pixel-btn small" id="btn-cgestie-food-get" onclick="doCgestieFoodGet()" style="background:#e87820;color:#fff"></button>
           <button class="pixel-btn small blue" id="btn-cgestie-feed-lizard" onclick="doCgestieFeedLizard()"></button>
+        </div>
+        <div style="border-top:1px solid #3a3a5c;margin-top:8px;padding-top:6px">
+          <div class="farm-stat-row">
+            <span class="stat-label" id="lbl-bt-food"></span>
+            <div class="stat-bar wide"><div class="stat-fill" id="bar-bt-food" style="width:0%;background:#5a8a6a"></div></div>
+            <span id="bt-food-count-text" style="font-size:7px;color:#5a8a6a;white-space:nowrap">0 / 10</span>
+          </div>
+          <div class="farm-btns">
+            <button class="pixel-btn small" id="btn-bt-food-get" onclick="doBtFoodGet()" style="background:#5a8a6a;color:#fff"></button>
+            <button class="pixel-btn small blue" id="btn-bt-feed-lizard" onclick="doBtFeedLizard()"></button>
+          </div>
         </div>
       </div>
       <!-- Chicory panel -->

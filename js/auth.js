@@ -82,5 +82,21 @@ const AUTH = {
       }
       this.saveUsers(users);
     }
+  },
+  getAccountCoins() {
+    const name = localStorage.getItem('tgs_current');
+    if (!name) return 0;
+    const users = this.getUsers();
+    const user = users[name];
+    return (user && typeof user.coins === 'number') ? user.coins : 0;
+  },
+  saveAccountCoins(amount) {
+    const username = localStorage.getItem('tgs_current');
+    if (!username) return;
+    const users = this.getUsers();
+    if (users[username]) {
+      users[username].coins = amount;
+      this.saveUsers(users);
+    }
   }
 };
