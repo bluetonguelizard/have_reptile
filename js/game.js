@@ -21,6 +21,7 @@ let newLizardTraits = [];  // temp: traits selected when adding new lizard
 let newLizardCountry = null; // temp: country selected when adding new bluetongue ('australia'|'indonesia')
 let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
 let hatchingEggId = null; // egg id being named after hatch
+let rehomeAnimState = null; // { phase, timer, lizardGs, name } — drives handover animation
 
 // Pixel art colors
 const C = {
@@ -93,6 +94,8 @@ function newGameState(type) {
     isLonely: false,
     lastLonelyDay: null,   // null = not yet adult; set to gameDaysPassed when adult first reached
     lonelyNotified: false,
+    btGenetics: null,      // bluetongue mutation allele counts per locus
+    btLocale: null,        // bluetongue subspecies locale (e.g. 'northern', 'eastern')
   };
 }
 
@@ -472,7 +475,7 @@ function drawShop() {
   ctx.textAlign = 'left';
 }
 
-function drawShopkeeper(x, y) {
+function drawShopkeeper(x, y, reaching) {
   // Body pixel art - simple shopkeeper
   const s = 4; // scale
   // Head
@@ -488,21 +491,210 @@ function drawShopkeeper(x, y) {
   px(x+4*s, y, 8*s, 2*s, '#3a2010');
   // Body (green apron)
   px(x+3*s, y+8*s, 10*s, 12*s, '#4a6a4a');
-  // Arms
+  // Left arm
   px(x, y+9*s, 3*s, 8*s, '#f5c88a');
-  px(x+13*s, y+9*s, 3*s, 8*s, '#f5c88a');
+  // Right arm — extended toward counter when reaching
+  if (reaching) {
+    px(x+13*s, y+9*s, 20*s, 4*s, '#f5c88a');
+  } else {
+    px(x+13*s, y+9*s, 3*s, 8*s, '#f5c88a');
+  }
   // Legs
   px(x+4*s, y+20*s, 4*s, 6*s, '#2a3a5a');
   px(x+8*s, y+20*s, 4*s, 6*s, '#2a3a5a');
-  // Speech bubble
-  const bx = x + 70, by = y - 30;
-  px(bx, by, 130, 28, C.white);
-  px(bx-2, by-2, 134, 32, C.black);
-  px(bx, by, 130, 28, C.white);
-  px(bx+12, by+28, 10, 8, C.white);
-  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillText(currentLang === 'ko' ? '알을 고르세요!' : 'Choose an egg!', bx+6, by+18);
+  if (!reaching) {
+    // Speech bubble (normal shop only)
+    const bx = x + 70, by = y - 30;
+    px(bx, by, 130, 28, C.white);
+    px(bx-2, by-2, 134, 32, C.black);
+    px(bx, by, 130, 28, C.white);
+    px(bx+12, by+28, 10, 8, C.white);
+    ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillText(currentLang === 'ko' ? '알을 고르세요!' : 'Choose an egg!', bx+6, by+18);
+  }
+}
+
+// ─── REHOME HANDOVER ANIMATION ────────────────────────────────────────────────
+function drawRehomePlayer(charX, charY, holdingLizard, lizardGs, walking, tm) {
+  const s = 4;
+  const bob = walking ? Math.abs(Math.sin(tm / 180)) * 3 : 0;
+  const fy = charY - bob;
+
+  // Shadow
+  ctx.globalAlpha = 0.2;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(charX - 4, charY + 2, 52, 8);
+  ctx.globalAlpha = 1;
+
+  // Legs
+  if (walking) {
+    const sw = Math.sin(tm / 180) * 6;
+    px(charX + 4, fy + sw * 0.5, 10, 22 - sw, '#3a3a6a');
+    px(charX + 18, fy - sw * 0.5, 10, 22 + sw, '#3a3a6a');
+  } else {
+    px(charX + 4, fy, 10, 22, '#3a3a6a');
+    px(charX + 18, fy, 10, 22, '#3a3a6a');
+  }
+  // Body (blue shirt)
+  px(charX, fy - 32, 32, 32, '#5a8ae8');
+  // Head
+  px(charX + 6, fy - 52, 20, 20, '#f5c88a');
+  // Hair
+  px(charX + 6, fy - 52, 20, 5, '#3a2010');
+  // Eye (facing left toward shopkeeper)
+  px(charX + 8, fy - 45, 4, 4, C.black);
+
+  // Left arm (toward shopkeeper — extended when holding lizard)
+  if (holdingLizard) {
+    px(charX - 18, fy - 28, 18, 8, '#f5c88a'); // arm extended left
+    const lc = lizardGs && lizardGs.type === 'crestie' ? '#e87820' : '#5a8a6a';
+    px(charX - 32, fy - 32, 18, 12, lc);        // lizard body
+    px(charX - 26, fy - 24, 22, 6, lc);          // tail
+    px(charX - 36, fy - 35, 10, 8, lc);          // head
+  } else {
+    px(charX - 6, fy - 28, 8, 22, '#f5c88a');
+  }
+  // Right arm
+  px(charX + 32, fy - 28, 8, 22, '#f5c88a');
+}
+
+function drawRehomeAnim() {
+  const W = canvas.width, H = canvas.height;
+  const ras = rehomeAnimState;
+  const tm = ras.timer;
+  const phase = ras.phase;
+
+  // Shop interior background
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, H * 0.7);
+  wallGrad.addColorStop(0, '#1a1208');
+  wallGrad.addColorStop(1, '#2a1e0c');
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, W, H * 0.7);
+  ctx.strokeStyle = '#3a2c14'; ctx.lineWidth = 1;
+  for (let wy = 0; wy < H * 0.7; wy += 40) {
+    ctx.beginPath(); ctx.moveTo(0, wy); ctx.lineTo(W, wy); ctx.stroke();
+  }
+  const intGlow = ctx.createRadialGradient(W / 2, 30, 10, W / 2, 30, W * 0.65);
+  intGlow.addColorStop(0, 'rgba(255,230,160,0.18)');
+  intGlow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = intGlow;
+  ctx.fillRect(0, 0, W, H * 0.7);
+  px(0, H * 0.7, W, H * 0.3, '#2e2010');
+  ctx.strokeStyle = '#221808'; ctx.lineWidth = 1;
+  for (let fy2 = H * 0.7; fy2 < H; fy2 += 16) {
+    ctx.beginPath(); ctx.moveTo(0, fy2); ctx.lineTo(W, fy2); ctx.stroke();
+  }
+  // Counter
+  px(W / 2 - 210, H * 0.5 - 4, 420, 6, '#b07828');
+  px(W / 2 - 210, H * 0.5, 420, 28, C.wood);
+  px(W / 2 - 210, H * 0.528, 420, 58, C.wood2);
+  px(W / 2 - 210, H * 0.5, 420, 3, '#d09040');
+
+  // Player position
+  const counterArriveX = W / 2 + 90;
+  const startX = W + 50;
+  let playerX;
+  let holdingLizard = true;
+  let showLizardOnCounter = false;
+  let shopkeeperReaching = false;
+  let showBubble = false;
+  let fadeAlpha = 0;
+
+  if (phase === 0) {
+    const prog = Math.min(1, tm / 2000);
+    const ease = 1 - (1 - prog) * (1 - prog);
+    playerX = startX - (startX - counterArriveX) * ease;
+    holdingLizard = true;
+  } else if (phase === 1) {
+    playerX = counterArriveX;
+    holdingLizard = tm < 600;
+    showLizardOnCounter = tm >= 500;
+    shopkeeperReaching = tm >= 900;
+  } else if (phase === 2) {
+    playerX = counterArriveX;
+    holdingLizard = false;
+    showLizardOnCounter = true;
+    shopkeeperReaching = true;
+    showBubble = true;
+  } else if (phase === 3) {
+    playerX = counterArriveX;
+    holdingLizard = false;
+    showLizardOnCounter = false;
+    shopkeeperReaching = true;
+    showBubble = true;
+    fadeAlpha = Math.min(1, tm / 1200);
+  }
+
+  // Shopkeeper
+  const skX = W / 2 - 140, skY = H * 0.2;
+  drawShopkeeper(skX, skY, shopkeeperReaching);
+
+  // Lizard on counter
+  if (showLizardOnCounter) {
+    const lx = W / 2 - 10, ly = H * 0.478;
+    const lc = ras.lizardGs.type === 'crestie' ? '#e87820' : '#5a8a6a';
+    px(lx - 6, ly - 6, 14, 10, lc);
+    px(lx, ly - 2, 22, 8, lc);
+    px(lx + 16, ly + 2, 20, 5, lc);
+    // Glint
+    if ((Math.floor(tm / 300)) % 2 === 0) {
+      ctx.fillStyle = '#fffde0';
+      ctx.fillRect(lx + 14, ly - 8, 4, 4);
+    }
+  }
+
+  // Player character
+  drawRehomePlayer(playerX, H * 0.688, holdingLizard, ras.lizardGs, phase === 0, tm);
+
+  // Speech bubble from shopkeeper
+  if (showBubble) {
+    const bubAlpha = phase === 2 ? Math.min(1, tm / 300) : 1;
+    ctx.globalAlpha = bubAlpha;
+    const bx = skX + 72, by = skY - 38;
+    const lines = (currentLang === 'ko' ? '잘 돌볼게요!' : "We'll take\ngreat care!").split('\n');
+    const bw = currentLang === 'ko' ? 130 : 120;
+    const bh = lines.length > 1 ? 48 : 30;
+    px(bx - 2, by - 2, bw + 4, bh + 4, C.black);
+    px(bx, by, bw, bh, C.white);
+    px(bx + 12, by + bh, 10, 8, C.white);
+    ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
+    ctx.fillStyle = '#1a1a1a';
+    lines.forEach((line, i) => ctx.fillText(line, bx + 6, by + 17 + i * 16));
+    ctx.globalAlpha = 1;
+  }
+
+  // PSA notice (phases 0–2)
+  if (phase < 3) {
+    // Fade in after initial fade-in completes, fade out entering phase 3
+    const psaAlpha = phase === 0 ? Math.min(1, Math.max(0, (tm - 400) / 300)) : 1;
+    ctx.globalAlpha = psaAlpha;
+    const psaText = t('rehome_psa');
+    ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
+    const tw = ctx.measureText(psaText).width;
+    const px2 = W / 2 - tw / 2 - 10, py2 = H - 36, pw = tw + 20, ph = 22;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(px2, py2, pw, ph);
+    ctx.fillStyle = '#ffb030';
+    ctx.fillText(psaText, W / 2 - tw / 2, py2 + 15);
+    ctx.globalAlpha = 1;
+  }
+
+  // Fade overlay
+  if (fadeAlpha > 0) {
+    ctx.globalAlpha = fadeAlpha;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
+  // Fade-in at start
+  if (phase === 0 && tm < 400) {
+    ctx.globalAlpha = Math.max(0, 1 - tm / 400);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawEggScene() {
@@ -1609,7 +1801,7 @@ function openCompanionModal() {
       info.style.cssText = 'flex:1;min-width:0';
       const genderText = l.gender === 'female' ? ' ♀' : ' ♂';
       const typeText = l.type === 'crestie' ? t('type_crestie') : t('type_bt');
-      const morphText = l.morph ? t('morph_' + l.morph) : '';
+      const morphText = getMorphLabel(l.type === 'bluetongue' ? l.btGenetics : l.genetics, l.morph, l.type);
       const colorText = l.color ? t('color_' + l.color) : '';
       const detail = [morphText, colorText].filter(Boolean).join(' · ');
       info.innerHTML =
@@ -1827,10 +2019,18 @@ function startMatingAnim(partnerIdx) {
           gs.lastMatingDay = gs.gameDaysPassed;
           gs.fertilizedEggLayCount = 0;
           gs.lastFertilizedEggLayDay = null;
+          gs.matingPartnerGenetics    = getLizardGenetics(partner);
+          gs.matingPartnerBtGenetics  = getBtLizardGenetics(partner);
+          gs.matingPartnerBtLocale    = partner ? (BT_LOCALE_SET.has(partner.morph) ? partner.morph : (partner.btLocale || 'northern')) : 'northern';
+          gs.matingPartnerTraits      = partner ? [...(partner.traits || [])] : [];
         } else if (partner && partner.gender === 'female' && partner.isAdult) {
           partner.lastMatingDay = gs.gameDaysPassed;
           partner.fertilizedEggLayCount = 0;
           partner.lastFertilizedEggLayDay = null;
+          partner.matingPartnerGenetics   = getLizardGenetics(gs);
+          partner.matingPartnerBtGenetics = getBtLizardGenetics(gs);
+          partner.matingPartnerBtLocale   = BT_LOCALE_SET.has(gs.morph) ? gs.morph : (gs.btLocale || 'northern');
+          partner.matingPartnerTraits     = [...(gs.traits || [])];
         }
         msgEl.textContent = t('mating_success');
         msgEl.style.color = '#ffb0e0';
@@ -1869,7 +2069,21 @@ function gameLoop(ts) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (scene === SCENE.SHOP) {
-    drawShop();
+    if (rehomeAnimState) {
+      drawRehomeAnim();
+      rehomeAnimState.timer += dt;
+      if (rehomeAnimState.phase === 0 && rehomeAnimState.timer > 2200) {
+        rehomeAnimState.phase = 1; rehomeAnimState.timer = 0;
+      } else if (rehomeAnimState.phase === 1 && rehomeAnimState.timer > 1800) {
+        rehomeAnimState.phase = 2; rehomeAnimState.timer = 0;
+      } else if (rehomeAnimState.phase === 2 && rehomeAnimState.timer > 2000) {
+        rehomeAnimState.phase = 3; rehomeAnimState.timer = 0;
+      } else if (rehomeAnimState.phase === 3 && rehomeAnimState.timer > 1300) {
+        _finalizeRehome();
+      }
+    } else {
+      drawShop();
+    }
   } else if (scene === SCENE.EGG) {
     drawEggScene();
   } else if (scene === SCENE.OUTDOOR) {
@@ -3181,11 +3395,17 @@ function getBluetongueColors(morph, traits) {
     halmahera: ['#2c2818','#100c04','#c8bc80','#201c10','#383018','#484030','#282010','#181408','#201a0c','#302818'],
     tanimbar:  ['#b08850','#200e00','#e8d898','#987040','#a87848','#906038','#985830','#582800','#683810','#784820'],
     kei_island:['#6a8870','#0c1810','#c8dcc0','#4a6850','#587860','#4a6850','#3a5840','#182818','#283828','#384840'],
-    ajantics:    ['#262830','#0c0c10','#d0d0d4','#181820','#bec0c4','#cecece','#202028','#0e0e12','#181820','#24242c'],
-    patternless: ['#a89870','#a89870','#e8d898','#887860','#908070','#a89870','#807050','#605840','#706850','#806858'],
-    melanistic:  ['#181810','#0c0c08','#484840','#101008','#1c1c14','#282820','#161610','#080808','#100c08','#181810'],
-    amelanistic: ['#d89030','#c87020','#f0e498','#b07020','#c07828','#d08838','#b06018','#884800','#985010','#a86020'],
-    albino:      ['#e8e0c0','#ccc4a0','#f8f4e0','#d0c8a8','#dcd4b8','#eae4c8','#c8c0a0','#b0a888','#b8b090','#c8c0a0'],
+    ajantics:         ['#262830','#0c0c10','#d0d0d4','#181820','#bec0c4','#cecece','#202028','#0e0e12','#181820','#24242c'],
+    patternless:      ['#a89870','#a89870','#e8d898','#887860','#908070','#a89870','#807050','#605840','#706850','#806858'],
+    melanistic:       ['#181810','#0c0c08','#484840','#101008','#1c1c14','#282820','#161610','#080808','#100c08','#181810'],
+    super_melanistic: ['#080808','#040404','#1c1c18','#060606','#0c0c0a','#101010','#060606','#020202','#040402','#080808'],
+    anerythristic:    ['#8a9090','#282c28','#c8ccc8','#707878','#808888','#6a7878','#6a7870','#484c48','#585c58','#686868'],
+    albino:           ['#e8e0c0','#ccc4a0','#f8f4e0','#d0c8a8','#dcd4b8','#eae4c8','#c8c0a0','#b0a888','#b8b090','#c8c0a0'],
+    hypo:             ['#d4a85c','#5a4030','#f8f0c8','#b89050','#c8a060','#b89050','#b09040','#989070','#a09878','#b0a888'],
+    lava:             ['#e87020','#181008','#f4d098','#c86018','#d07028','#e08030','#c06010','#983000','#a84010','#b85020'],
+    platinum:         ['#b0b0a8','#484840','#d8d8d0','#909088','#a0a098','#b8b8b0','#888880','#606058','#707068','#808078'],
+    sunglow:          ['#f0d060','#d8b848','#fef8d8','#e8c850','#f0d060','#e8d868','#e0c048','#c8a030','#d0a838','#d8b040'],
+    snow:             ['#e0e4e0','#c0c4c0','#f4f8f4','#d0d4d0','#d8dcd8','#e4e8e4','#c8ccc8','#b0b4b0','#b8bcb8','#c0c4c0'],
   };
   const a = M[morph] || M.northern;
   let c = {
@@ -3205,11 +3425,11 @@ function getBluetongueColors(morph, traits) {
 
 const LIZARD_MORPHS = {
   crestie:    ['normal', 'lilly_white', 'cappuccino', 'sable', 'azantic', 'choco'],
-  bluetongue: ['ajantics', 'patternless', 'melanistic', 'amelanistic', 'albino']
+  bluetongue: ['hypo', 'patternless', 'melanistic', 'anerythristic', 'albino']
 };
 const BT_MORPHS_BY_COUNTRY = {
-  australia: ['amelanistic', 'melanistic', 'albino', 'patternless'],
-  indonesia: ['azantic', 'patternless', 'melanistic', 'amelanistic', 'albino'],
+  australia: ['hypo', 'anerythristic', 'melanistic', 'albino', 'patternless'],
+  indonesia: ['patternless', 'melanistic', 'albino'],
 };
 const LIZARD_LOCALES = {
   bluetongue: ['northern', 'eastern', 'irian_jaya', 'merauke', 'halmahera', 'tanimbar', 'kei_island']
@@ -3235,6 +3455,215 @@ const LIZARD_TRAITS = ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternl
 function getBtTraits(country, morph) {
   if (country === 'australia' && morph === 'northern') return ['sunset'];
   return [];
+}
+
+// ─── BT GENETICS SYSTEM ──────────────────────────────────────────────────────
+// Locales are subspecies names (not mutation morphs)
+const BT_LOCALE_SET = new Set([
+  'northern', 'eastern', 'central', 'blotched', 'western', 'singleback',
+  'halmahera', 'merauke', 'irian_jaya', 'tanimbar', 'kei_island'
+]);
+
+const BT_MORPH_LOCI = {
+  albino:        'recessive',   // 2 alleles = albino
+  anerythristic: 'recessive',   // 2 alleles = anerythristic (no red/yellow pigment)
+  hypo:          'recessive',   // 2 alleles = hypomelanistic (proven recessive)
+  melanistic:    'codominant',  // 1 = melanistic; 2 = super_melanistic
+  patternless:   'recessive',   // 2 alleles = patternless
+};
+
+const BT_MORPH_COMBOS = [
+  { loci: ['albino', 'melanistic'],    name: 'lava'     },
+  { loci: ['hypo',   'melanistic'],    name: 'platinum' },
+  { loci: ['hypo',   'albino'],        name: 'sunglow'  },
+  { loci: ['albino', 'anerythristic'], name: 'snow'     },
+];
+
+function inferBtGenetics(morph) {
+  const g = {};
+  for (const locus of Object.keys(BT_MORPH_LOCI)) g[locus] = 0;
+  switch (morph) {
+    case 'albino':           g.albino        = 2; break;
+    case 'anerythristic':    g.anerythristic = 2; break;
+    case 'hypo':             g.hypo          = 2; break;
+    case 'melanistic':       g.melanistic    = 1; break;
+    case 'super_melanistic': g.melanistic    = 2; break;
+    case 'patternless':      g.patternless   = 2; break;
+    case 'lava':             g.albino = 2; g.melanistic    = 1; break;
+    case 'platinum':         g.hypo   = 2; g.melanistic    = 1; break;
+    case 'sunglow':          g.hypo   = 2; g.albino        = 2; break;
+    case 'snow':             g.albino = 2; g.anerythristic = 2; break;
+  }
+  return g;
+}
+
+function getBtLizardGenetics(lizard) {
+  if (!lizard || lizard.type !== 'bluetongue') return null;
+  if (lizard.btGenetics) return lizard.btGenetics;
+  const mutationMorph = BT_LOCALE_SET.has(lizard.morph) ? null : (lizard.morph || null);
+  return inferBtGenetics(mutationMorph || 'normal');
+}
+
+function crossBtGenetics(momG, dadG) {
+  const childG = {};
+  for (const locus of Object.keys(BT_MORPH_LOCI)) {
+    const m = momG[locus] || 0;
+    const d = dadG[locus] || 0;
+    const momAllele = Math.random() < m / 2 ? 1 : 0;
+    const dadAllele = Math.random() < d / 2 ? 1 : 0;
+    childG[locus] = momAllele + dadAllele;
+  }
+  return childG;
+}
+
+function getBtPhenotype(g, fallbackLocale) {
+  if (!g) return fallbackLocale || 'northern';
+  const expressed = Object.entries(BT_MORPH_LOCI)
+    .filter(([locus, type]) => {
+      const cnt = g[locus] || 0;
+      return type === 'codominant' ? cnt >= 1 : cnt >= 2;
+    })
+    .map(([locus]) => locus);
+  if (expressed.length === 0) return fallbackLocale || 'northern';
+  for (const combo of BT_MORPH_COMBOS) {
+    if (combo.loci.every(l => expressed.includes(l))) return combo.name;
+  }
+  if (expressed.length === 1) {
+    const locus = expressed[0];
+    if (BT_MORPH_LOCI[locus] === 'codominant' && (g[locus] || 0) === 2) return 'super_' + locus;
+    return locus;
+  }
+  return expressed[0];
+}
+
+// ─── CRESTIE GENETICS SYSTEM ─────────────────────────────────────────────────
+// Crestie morph loci and their inheritance type
+const CRESTIE_MORPH_LOCI = {
+  lilly_white: 'codominant',  // 1 allele = visible; 2 = super form
+  cappuccino:  'codominant',
+  sable:       'codominant',
+  azantic:     'recessive',   // 1 allele = het (hidden); 2 = visible
+  choco:       'recessive',
+};
+
+// Combo morph names produced when multiple loci express simultaneously
+// Sorted most-specific first (longer loci list = higher priority)
+const CRESTIE_MORPH_COMBOS = [
+  { loci: ['lilly_white', 'cappuccino', 'sable'], name: 'triple_combo'        },
+  { loci: ['lilly_white', 'cappuccino'],           name: 'frappuccino'         },
+  { loci: ['cappuccino',  'sable'],                name: 'luwak'               },
+  { loci: ['lilly_white', 'sable'],                name: 'lilly_sable'         },
+  { loci: ['lilly_white', 'azantic'],              name: 'lilly_azantic'       },
+  { loci: ['lilly_white', 'choco'],                name: 'lilly_choco'         },
+  { loci: ['cappuccino',  'azantic'],              name: 'cappuccino_azantic'  },
+  { loci: ['sable',       'azantic'],              name: 'sable_azantic'       },
+  { loci: ['cappuccino',  'choco'],                name: 'cappuccino_choco'    },
+  { loci: ['sable',       'choco'],                name: 'sable_choco'         },
+];
+
+// Derive genotype from a morph string (for lizards that predate the genetics system)
+function inferCrestieGenetics(morph) {
+  const g = {};
+  for (const locus of Object.keys(CRESTIE_MORPH_LOCI)) g[locus] = 0;
+  switch (morph) {
+    case 'lilly_white':        g.lilly_white = 1; break;
+    case 'cappuccino':         g.cappuccino  = 1; break;
+    case 'sable':              g.sable       = 1; break;
+    case 'azantic':            g.azantic     = 2; break;
+    case 'choco':              g.choco       = 2; break;
+    case 'frappuccino':        g.lilly_white = 1; g.cappuccino = 1; break;
+    case 'luwak':              g.cappuccino  = 1; g.sable      = 1; break;
+    case 'lilly_sable':        g.lilly_white = 1; g.sable      = 1; break;
+    case 'lilly_azantic':      g.lilly_white = 1; g.azantic    = 2; break;
+    case 'lilly_choco':        g.lilly_white = 1; g.choco      = 2; break;
+    case 'cappuccino_azantic': g.cappuccino  = 1; g.azantic    = 2; break;
+    case 'sable_azantic':      g.sable       = 1; g.azantic    = 2; break;
+    case 'cappuccino_choco':   g.cappuccino  = 1; g.choco      = 2; break;
+    case 'sable_choco':        g.sable       = 1; g.choco      = 2; break;
+    case 'triple_combo':       g.lilly_white = 1; g.cappuccino = 1; g.sable = 1; break;
+    case 'super_lilly_white':  g.lilly_white = 2; break;
+    case 'super_cappuccino':   g.cappuccino  = 2; break;
+    case 'super_sable':        g.sable       = 2; break;
+  }
+  return g;
+}
+
+function getLizardGenetics(lizard) {
+  if (!lizard || lizard.type !== 'crestie') return null;
+  return lizard.genetics || inferCrestieGenetics(lizard.morph || 'normal');
+}
+
+// Each parent contributes one allele; allele count per parent: 0/1/2 morph alleles
+function crossCrestieGenetics(momG, dadG) {
+  const childG = {};
+  for (const locus of Object.keys(CRESTIE_MORPH_LOCI)) {
+    const m = momG[locus] || 0;
+    const d = dadG[locus] || 0;
+    const momAllele = Math.random() < m / 2 ? 1 : 0;
+    const dadAllele = Math.random() < d / 2 ? 1 : 0;
+    childG[locus] = momAllele + dadAllele;
+  }
+  return childG;
+}
+
+// Determine visual morph name from genotype
+function getCrestiePhenotype(g) {
+  if (!g) return 'normal';
+  const expressed = Object.entries(CRESTIE_MORPH_LOCI)
+    .filter(([locus, type]) => {
+      const cnt = g[locus] || 0;
+      return type === 'codominant' ? cnt >= 1 : cnt >= 2;
+    })
+    .map(([locus]) => locus);
+
+  if (expressed.length === 0) return 'normal';
+
+  // Check combos (most specific first)
+  for (const combo of CRESTIE_MORPH_COMBOS) {
+    if (expressed.length === combo.loci.length && combo.loci.every(l => expressed.includes(l))) {
+      return combo.name;
+    }
+  }
+
+  if (expressed.length === 1) {
+    const locus = expressed[0];
+    // Homozygous co-dominant = super form
+    if (CRESTIE_MORPH_LOCI[locus] === 'codominant' && (g[locus] || 0) === 2) {
+      return 'super_' + locus;
+    }
+    return locus;
+  }
+
+  return expressed.join('_');
+}
+
+// Build display label including het carrier status (for both crestie and BT)
+function getMorphLabel(genetics, morph, type) {
+  let baseMorph, label, hetParts = [];
+  if (genetics && type === 'crestie') {
+    baseMorph = getCrestiePhenotype(genetics);
+    label = t('morph_' + baseMorph) || baseMorph;
+    hetParts = Object.entries(CRESTIE_MORPH_LOCI)
+      .filter(([locus, itype]) => itype === 'recessive' && (genetics[locus] || 0) === 1)
+      .map(([locus]) => t('morph_' + locus) || locus);
+  } else if (genetics && type === 'bluetongue') {
+    baseMorph = getBtPhenotype(genetics, morph);
+    label = t('morph_' + baseMorph) || baseMorph;
+    hetParts = Object.entries(BT_MORPH_LOCI)
+      .filter(([locus, itype]) => itype === 'recessive' && (genetics[locus] || 0) === 1)
+      .map(([locus]) => t('morph_' + locus) || locus);
+  } else {
+    baseMorph = morph || 'normal';
+    label = t('morph_' + baseMorph) || baseMorph;
+  }
+  if (hetParts.length > 0) label += ' het ' + hetParts.join(' ');
+  return label;
+}
+
+// Offspring inherits each trait present in either parent with 50% probability
+function deriveOffspringTraits(momTraits, dadTraits) {
+  const all = [...new Set([...(momTraits || []), ...(dadTraits || [])])];
+  return all.filter(() => Math.random() < 0.5);
 }
 
 function showDogramAdd() {
@@ -3355,10 +3784,13 @@ function showDogramMorph() {
         leucistic:   '#e8e4d8',
         melanistic:  '#181810',
         patternless: '#a89870',
-        amelanistic: '#d89030',
-        albino:      '#dcd4b8',
+        anerythristic: '#8a9090',
+        albino:        '#dcd4b8',
+        platinum:      '#b0b0a8',
+        sunglow:       '#f0d060',
+        snow:          '#e0e4e0',
       };
-      const BT_MORPH_LIGHT = ['patternless', 'albino', 'amelanistic'];
+      const BT_MORPH_LIGHT = ['patternless', 'albino', 'anerythristic', 'platinum', 'sunglow', 'snow'];
       morphs.forEach(id => {
         const bg = BT_MORPH_COLORS[id] || '#8a6020';
         const btn = makeMorphBtn(id, bg);
@@ -3526,7 +3958,7 @@ let _sellTargetIdx = null;
 function calcSellPrice(lizardGs) {
   let price = 10; // base
   // Rare morphs give bonus
-  const rareMorphs = ['lilly_white', 'azantic', 'sable', 'cappuccino', 'hypo', 'caramel', 'leucistic', 'melanistic', 'amelanistic', 'albino'];
+  const rareMorphs = ['lilly_white', 'azantic', 'sable', 'cappuccino', 'hypo', 'caramel', 'leucistic', 'melanistic', 'anerythristic', 'albino', 'lava', 'platinum', 'sunglow', 'snow'];
   if (lizardGs.morph && rareMorphs.includes(lizardGs.morph)) price += 10;
   // Traits bonus
   if (lizardGs.traits && lizardGs.traits.length > 0) price += lizardGs.traits.length * 5;
@@ -3643,25 +4075,33 @@ function confirmRehome() {
   document.getElementById('rehome-modal').style.display = 'none';
   const name = lizardName || '???';
 
-  // Remove current lizard from list
+  // Start handover animation — actual removal happens in _finalizeRehome()
+  rehomeAnimState = { phase: 0, timer: 0, lizardGs: { ...gs }, name };
+
+  scene = SCENE.SHOP;
+  document.getElementById('ui-overlay').style.display = 'none';
+  document.getElementById('date-display').style.display = 'none';
+  document.getElementById('time-display').style.display = 'none';
+  updateDogramButton();
+}
+
+function _finalizeRehome() {
+  const ras = rehomeAnimState;
+  rehomeAnimState = null;
+  const name = ras.name;
+
+  // Remove lizard from list
   allLizards.splice(activeLizardIdx, 1);
   if (activeLizardIdx >= allLizards.length && allLizards.length > 0) {
     activeLizardIdx = allLizards.length - 1;
   }
 
-  // Clear active state → go to egg shop
   gs = null;
   lizardType = null;
   lizardName = '';
-  scene = SCENE.SHOP;
+  // scene stays SCENE.SHOP
 
   AUTH.saveAllLizards(allLizards, Math.max(0, activeLizardIdx));
-
-  // Hide room UI
-  document.getElementById('ui-overlay').style.display = 'none';
-  document.getElementById('date-display').style.display = 'none';
-  document.getElementById('time-display').style.display = 'none';
-
   updateDogramButton();
   showMsg(t('rehome_ok').replace('{name}', name), 3000);
 }
@@ -3696,7 +4136,7 @@ function renderDogram() {
     else if (days >= 90) stage = t('age_subadult');
     const genderText = (lizardGs.gender && days >= 270)
       ? (lizardGs.gender === 'female' ? ' ♀' : ' ♂') : '';
-    const morphText = lizardGs.morph ? t('morph_' + lizardGs.morph) : '';
+    const morphText = getMorphLabel(lizardGs.type === 'bluetongue' ? lizardGs.btGenetics : lizardGs.genetics, lizardGs.morph, lizardGs.type);
     const colorText = lizardGs.color ? t('color_' + lizardGs.color) : '';
     const traitsText = (lizardGs.traits && lizardGs.traits.length > 0)
       ? lizardGs.traits.map(tr => tTrait(tr, lizardGs.type)).join(' · ')
@@ -3913,7 +4353,7 @@ function updateIncubatorUI() {
     const titleSpan = document.createElement('span');
     titleSpan.style.cssText = `font-size:7px;color:${typeColor};`;
     const typeName = isCrestie ? t('type_crestie') : t('type_bt');
-    const morphStr = egg.morph ? t('morph_' + egg.morph) : '';
+    const morphStr = getMorphLabel(egg.type === 'bluetongue' ? egg.btGenetics : egg.genetics, egg.morph, egg.type);
     titleSpan.textContent = `${typeName}${morphStr ? ' · ' + morphStr : ''}`;
     const parentSpan = document.createElement('span');
     parentSpan.style.cssText = 'font-size:7px;color:#888;';
@@ -4011,11 +4451,39 @@ function collectEgg(lizardIdx) {
   const eggs = AUTH.getIncubator();
   const isCrestie = lizard.type === 'crestie';
   const now = Date.now();
+
+  // Determine offspring genetics by crossing mother × partner
+  let eggGenetics   = null;
+  let eggBtGenetics = null;
+  let eggBtLocale   = null;
+  let eggMorph      = lizard.morph || 'normal';
+  let eggTraits     = lizard.traits ? [...lizard.traits] : [];
+  if (lizard.type === 'crestie') {
+    const momG = getLizardGenetics(lizard);
+    const dadG = lizard.matingPartnerGenetics || inferCrestieGenetics('normal');
+    eggGenetics = crossCrestieGenetics(momG, dadG);
+    eggMorph    = getCrestiePhenotype(eggGenetics);
+    eggTraits   = deriveOffspringTraits(lizard.traits, lizard.matingPartnerTraits);
+  } else {
+    // BT: cross mutation morph genetics and randomly inherit locale
+    const momBtG   = getBtLizardGenetics(lizard);
+    const dadBtG   = lizard.matingPartnerBtGenetics || inferBtGenetics('normal');
+    eggBtGenetics  = crossBtGenetics(momBtG, dadBtG);
+    const momLocale = BT_LOCALE_SET.has(lizard.morph) ? lizard.morph : (lizard.btLocale || 'northern');
+    const dadLocale = lizard.matingPartnerBtLocale || 'northern';
+    eggBtLocale    = Math.random() < 0.5 ? momLocale : dadLocale;
+    eggMorph       = getBtPhenotype(eggBtGenetics, eggBtLocale);
+    eggTraits      = deriveOffspringTraits(lizard.traits, lizard.matingPartnerTraits);
+  }
+
   const eggBase = {
     type: lizard.type,
-    morph: lizard.morph || 'normal',
+    morph: eggMorph,
+    genetics: eggGenetics,
+    btGenetics: eggBtGenetics,
+    btLocale: eggBtLocale,
     color: lizard.color || null,
-    traits: lizard.traits ? [...lizard.traits] : [],
+    traits: eggTraits,
     country: lizard.country || null,
     parentName: lizard.lizardName || '???',
     placedRealTime: now,
@@ -4134,6 +4602,9 @@ function finishHatchEgg(name) {
   const newGs = newGameState(egg.type);
   newGs.lizardName = name;
   newGs.morph = egg.morph || 'normal';
+  if (egg.genetics)   newGs.genetics   = egg.genetics;
+  if (egg.btGenetics) newGs.btGenetics = egg.btGenetics;
+  if (egg.btLocale)   newGs.btLocale   = egg.btLocale;
   if (egg.color) newGs.color = egg.color;
   if (egg.traits && egg.traits.length > 0) newGs.traits = [...egg.traits];
   if (egg.country) newGs.country = egg.country;
