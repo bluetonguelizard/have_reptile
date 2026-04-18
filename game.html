@@ -62,6 +62,7 @@
       <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
       <button class="pixel-btn small" id="btn-sleep" onclick="doSleep()" style="display:none;background:#1e1550;color:#aaaaee"></button>
       <button class="pixel-btn small" id="btn-farm" onclick="openFarm()" style="background:#3a7a3a;color:#c8f0c8"></button>
+      <button class="pixel-btn small" id="btn-companion" onclick="doFindCompanion()" style="display:none;background:#9a2a6a;color:#ffb0e0"></button>
     </div>
   </div>
 
@@ -285,6 +286,28 @@
     </div>
   </div>
 
+  <!-- Companion list modal -->
+  <div id="companion-modal" style="display:none">
+    <div class="modal-panel" style="max-width:340px;text-align:left">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 id="companion-modal-title" style="margin-bottom:0;font-size:9px"></h2>
+        <button class="pixel-btn small red" onclick="closeCompanionModal()">✕</button>
+      </div>
+      <div id="companion-list" style="max-height:280px;overflow-y:auto"></div>
+      <p id="companion-no-partners" style="display:none;font-size:7px;color:#aaa;text-align:center;padding:20px 0;line-height:2;white-space:pre-line;margin-bottom:0"></p>
+    </div>
+  </div>
+
+  <!-- Mating animation modal -->
+  <div id="mating-modal" style="display:none">
+    <div class="modal-panel" style="max-width:360px;text-align:center">
+      <canvas id="mating-canvas" width="300" height="130"
+        style="display:block;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges;width:300px;height:130px"></canvas>
+      <p id="mating-msg" style="font-size:7px;color:#f090c0;margin-top:10px;line-height:1.8;min-height:18px;margin-bottom:6px"></p>
+      <button id="mating-close-btn" class="pixel-btn small" onclick="closeMatingModal()" style="display:none"></button>
+    </div>
+  </div>
+
   <!-- Name modal -->
   <div id="name-modal" style="display:none">
     <div class="modal-panel">
@@ -328,6 +351,9 @@ function updateGameLabels() {
   document.getElementById('btn-data-import').textContent = t('data_import');
   document.getElementById('btn-sleep').textContent = t('sleep_btn');
   document.getElementById('btn-farm').textContent = t('farm_btn');
+  document.getElementById('btn-companion').textContent = t('companion_btn');
+  document.getElementById('companion-modal-title').textContent = t('companion_title');
+  document.getElementById('mating-close-btn').textContent = t('companion_close');
   document.getElementById('btn-leave-outdoor').textContent = t('dandelion_complete_btn');
   if (document.getElementById('farm-modal').style.display !== 'none') updateFarmUI();
   if (outdoorState) updateOutdoorCounter();

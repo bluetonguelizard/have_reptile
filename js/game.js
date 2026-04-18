@@ -1422,6 +1422,11 @@ function drawUI() {
     actionBtns.forEach(id => { document.getElementById(id).style.display = ''; });
     sleepBtn.style.display = isSleepyHour() ? '' : 'none';
   }
+  // Companion button — visible only when adult
+  const companionBtn = document.getElementById('btn-companion');
+  if (companionBtn) {
+    companionBtn.style.display = gs.isAdult ? '' : 'none';
+  }
 }
 
 function showMsg(text, duration=2500) {
@@ -1515,6 +1520,217 @@ function doSleep() {
   gs.isSleeping = true;
   showMsg(t('sleeping_msg'), 3000);
   saveGame();
+}
+
+function doFindCompanion() {
+  if (!gs || !gs.bornAnim) return;
+  if (!gs.isAdult) { showMsg(t('companion_msg_no_adult'), 3000); return; }
+  openCompanionModal();
+}
+
+function openCompanionModal() {
+  document.getElementById('companion-modal-title').textContent = t('companion_title');
+
+  // Find same-type, opposite-gender, adult lizards (excluding current)
+  const partners = allLizards
+    .map((l, i) => ({ l, i }))
+    .filter(({ l, i }) =>
+      i !== activeLizardIdx &&
+      l.type === gs.type &&
+      l.isAdult &&
+      l.gender && gs.gender &&
+      l.gender !== gs.gender
+    );
+
+  const list = document.getElementById('companion-list');
+  const noMsg = document.getElementById('companion-no-partners');
+  list.innerHTML = '';
+
+  if (partners.length === 0) {
+    noMsg.style.display = '';
+    noMsg.textContent = t('companion_no_partners');
+  } else {
+    noMsg.style.display = 'none';
+    partners.forEach(({ l, i }) => {
+      const card = document.createElement('div');
+      card.style.cssText =
+        'display:flex;align-items:center;gap:10px;padding:8px 6px;background:#1a0a14;' +
+        'border:2px solid #6a2a4a;margin-bottom:6px;border-radius:2px;cursor:pointer';
+
+      const miniCanvas = document.createElement('canvas');
+      miniCanvas.width = 80; miniCanvas.height = 54;
+      miniCanvas.className = 'dogram-mini-canvas';
+      card.appendChild(miniCanvas);
+
+      const info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0';
+      const genderText = l.gender === 'female' ? ' ♀' : ' ♂';
+      const typeText = l.type === 'crestie' ? t('type_crestie') : t('type_bt');
+      const morphText = l.morph ? t('morph_' + l.morph) : '';
+      const colorText = l.color ? t('color_' + l.color) : '';
+      const detail = [morphText, colorText].filter(Boolean).join(' · ');
+      info.innerHTML =
+        `<div style="font-size:8px;color:#e8a020;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">` +
+          `${l.lizardName || '???'}${genderText}</div>` +
+        `<div style="font-size:7px;color:#aaa;margin-top:2px">${typeText}${detail ? ' · ' + detail : ''}</div>`;
+      card.appendChild(info);
+
+      const btn = document.createElement('button');
+      btn.className = 'pixel-btn small';
+      btn.style.cssText = 'background:#9a2a6a;color:#ffb0e0;flex-shrink:0';
+      btn.textContent = t('companion_select');
+      btn.onclick = () => { closeCompanionModal(); startMatingAnim(i); };
+      card.appendChild(btn);
+
+      list.appendChild(card);
+      renderMiniLizard(miniCanvas, l);
+    });
+  }
+
+  document.getElementById('companion-modal').style.display = 'flex';
+}
+
+function closeCompanionModal() {
+  document.getElementById('companion-modal').style.display = 'none';
+}
+
+// ─── MATING ANIMATION ────────────────────────────────────────────────────────
+let _matingAnimId = null;
+let _matingTick   = 0;
+const MATING_TOTAL  = 160;
+const MATING_KISS   = 65; // frame when snouts meet
+
+function startMatingAnim(partnerIdx) {
+  const partner = allLizards[partnerIdx];
+  _matingTick = 0;
+
+  const modal = document.getElementById('mating-modal');
+  modal.style.display = 'flex';
+  document.getElementById('mating-close-btn').style.display = 'none';
+  document.getElementById('mating-msg').textContent = '';
+
+  const mCanvas = document.getElementById('mating-canvas');
+  const W = mCanvas.width;   // 300
+  const H = mCanvas.height;  // 130
+  const sc = 0.42;
+  const s  = 3; // used inside draw functions
+  const isC = gs.type === 'crestie';
+
+  // How far snout/tail are from the draw origin (in local px = units*s)
+  const snoutPx = (isC ? 20 : 28) * s * sc; // canvas px from origin to snout
+  const tailPx  = (isC ?  8 :  7) * s * sc; // canvas px from origin to tail tip
+
+  const centerX = W / 2;
+  const yOff    = Math.round(H * 0.62); // canvas y of the draw origin
+  const mockAnim = { frame: 0, timer: 0, threatening: false, sleeping: false };
+
+  // Left lizard travels from lx_start → lx_end
+  const lx_start = 5 + tailPx;
+  const lx_end   = centerX - snoutPx;
+  // Right lizard (flipped) travels from rx_start → rx_end
+  const rx_start = W - 5 - tailPx;
+  const rx_end   = centerX + snoutPx;
+
+  if (_matingAnimId) { cancelAnimationFrame(_matingAnimId); _matingAnimId = null; }
+
+  function drawFrame() {
+    const mCtx = mCanvas.getContext('2d');
+    mCtx.imageSmoothingEnabled = false;
+
+    // -- Background --
+    mCtx.fillStyle = '#180810';
+    mCtx.fillRect(0, 0, W, H);
+    // Hearts pattern on bg (static tiny hearts)
+    mCtx.fillStyle = '#2a0a18';
+    for (let hx = 12; hx < W; hx += 30) {
+      for (let hy = 10; hy < H * 0.6; hy += 24) {
+        mCtx.fillRect(hx,   hy,   3, 2);
+        mCtx.fillRect(hx+3, hy,   3, 2);
+        mCtx.fillRect(hx+1, hy-1, 4, 1);
+        mCtx.fillRect(hx+1, hy+2, 4, 2);
+        mCtx.fillRect(hx+2, hy+4, 2, 1);
+      }
+    }
+    // Floor
+    mCtx.fillStyle = '#2a1020';
+    mCtx.fillRect(0, Math.floor(H * 0.72), W, H);
+    mCtx.fillStyle = '#3a1830';
+    mCtx.fillRect(0, Math.floor(H * 0.72), W, 2);
+
+    // -- Ease-in-out approach --
+    const t01 = Math.min(1, _matingTick / MATING_KISS);
+    const ease = t01 < 0.5 ? 2 * t01 * t01 : -1 + (4 - 2 * t01) * t01;
+
+    const lx = lx_start + (lx_end - lx_start) * ease;
+    const rx = rx_start + (rx_end - rx_start) * ease;
+
+    const savedCtx = ctx;
+    ctx = mCtx;
+
+    // Left lizard — faces right (normal)
+    mCtx.save();
+    mCtx.translate(Math.round(lx), yOff);
+    mCtx.scale(sc, sc);
+    if (isC) drawCrestie(0, 0, mockAnim, { morph: gs.morph, color: gs.color, traits: gs.traits });
+    else     drawBluetongue(0, 0, mockAnim, { morph: gs.morph, color: gs.color, traits: gs.traits });
+    mCtx.restore();
+
+    // Right lizard — faces left (mirror via scale(-sc, sc))
+    mCtx.save();
+    mCtx.translate(Math.round(rx), yOff);
+    mCtx.scale(-sc, sc);
+    if (partner.type === 'crestie') drawCrestie(0, 0, mockAnim, { morph: partner.morph, color: partner.color, traits: partner.traits });
+    else                             drawBluetongue(0, 0, mockAnim, { morph: partner.morph, color: partner.color, traits: partner.traits });
+    mCtx.restore();
+
+    ctx = savedCtx;
+
+    // -- Hearts / kiss effect after meeting --
+    if (_matingTick >= MATING_KISS) {
+      const hp = (_matingTick - MATING_KISS) / (MATING_TOTAL - MATING_KISS); // 0→1
+
+      // Kiss sparkle at snout meeting point
+      const kissY = yOff + (isC ? 6 : 8) * s * sc; // approx mouth height
+      const sparkAlpha = Math.max(0, 1 - hp * 1.4);
+
+      mCtx.save();
+      mCtx.globalAlpha = sparkAlpha;
+      mCtx.font = `${Math.round(14 + 6 * Math.sin(hp * Math.PI))}px serif`;
+      mCtx.textAlign = 'center';
+      mCtx.textBaseline = 'middle';
+      // Main kiss mark — pulses and rises
+      mCtx.fillText('💋', centerX, kissY - hp * 22);
+
+      // Floating side hearts
+      mCtx.font = '11px serif';
+      mCtx.globalAlpha = Math.max(0, 0.9 - hp);
+      mCtx.fillText('❤', centerX - 22, kissY - 8  - hp * 28);
+      mCtx.fillText('❤', centerX + 24, kissY - 12 - hp * 24);
+      mCtx.globalAlpha = Math.max(0, 0.7 - hp);
+      mCtx.fillText('❤', centerX,      kissY - 18 - hp * 32);
+      mCtx.restore();
+    }
+
+    _matingTick++;
+
+    if (_matingTick < MATING_TOTAL) {
+      _matingAnimId = requestAnimationFrame(drawFrame);
+    } else {
+      _matingAnimId = null;
+      document.getElementById('mating-close-btn').style.display = '';
+      // Small bond/happy boost for current lizard
+      gs.bond  = Math.min(100, gs.bond  + 3);
+      gs.happy = Math.min(100, gs.happy + 8);
+      saveGame();
+    }
+  }
+
+  drawFrame();
+}
+
+function closeMatingModal() {
+  if (_matingAnimId) { cancelAnimationFrame(_matingAnimId); _matingAnimId = null; }
+  document.getElementById('mating-modal').style.display = 'none';
 }
 
 // ─── MAIN LOOP ───────────────────────────────────────────────────────────────
@@ -2871,10 +3087,10 @@ const LIZARD_COLORS = {
   ]
 };
 const LIZARD_TRAITS = ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternless', 'high_yellow', 'hypo', 'bold', 'melanistic', 'extreme_harlequin'];
-const BT_TRAITS_BY_COUNTRY = {
-  australia: ['sunset'],
-  indonesia: [],
-};
+function getBtTraits(country, morph) {
+  if (country === 'australia' && morph === 'northern') return ['sunset'];
+  return [];
+}
 
 function showDogramAdd() {
   if (AUTH.getAccountCoins() < ADOPT_COST) {
@@ -3081,7 +3297,7 @@ function showDogramTrait() {
 
   const btns = document.getElementById('dogram-trait-btns');
   btns.innerHTML = '';
-  const traitList = newLizardType === 'bluetongue' ? (BT_TRAITS_BY_COUNTRY[newLizardCountry] || []) : LIZARD_TRAITS;
+  const traitList = newLizardType === 'bluetongue' ? (getBtTraits(newLizardCountry, newLizardMorph)) : LIZARD_TRAITS;
   traitList.forEach(trait => {
     const btn = document.createElement('button');
     btn.className = 'pixel-btn dogram-type-btn';
@@ -3098,7 +3314,7 @@ function toggleLizardTrait(trait) {
   const idx = newLizardTraits.indexOf(trait);
   if (idx >= 0) newLizardTraits.splice(idx, 1);
   else newLizardTraits.push(trait);
-  const traitList = newLizardType === 'bluetongue' ? (BT_TRAITS_BY_COUNTRY[newLizardCountry] || []) : LIZARD_TRAITS;
+  const traitList = newLizardType === 'bluetongue' ? (getBtTraits(newLizardCountry, newLizardMorph)) : LIZARD_TRAITS;
   traitList.forEach(tr => {
     const btn = document.getElementById('trait-btn-' + tr);
     if (!btn) return;
