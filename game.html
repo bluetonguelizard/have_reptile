@@ -63,6 +63,7 @@
       <button class="pixel-btn small" id="btn-sleep" onclick="doSleep()" style="display:none;background:#1e1550;color:#aaaaee"></button>
       <button class="pixel-btn small" id="btn-farm" onclick="openFarm()" style="background:#3a7a3a;color:#c8f0c8"></button>
       <button class="pixel-btn small" id="btn-companion" onclick="doFindCompanion()" style="display:none;background:#9a2a6a;color:#ffb0e0"></button>
+      <button class="pixel-btn small" id="btn-rehome" onclick="doRehome()" style="background:#5a3010;color:#d8a060"></button>
     </div>
   </div>
 
@@ -267,6 +268,19 @@
           <button class="pixel-btn small green" id="btn-dogram-confirm-traits" onclick="confirmNewLizardTraits()"></button>
         </div>
       </div>
+      <!-- Sell confirm view -->
+      <div id="dogram-sell-view" style="display:none">
+        <div class="dogram-header">
+          <h2 id="dogram-sell-title"></h2>
+          <button class="pixel-btn small red" onclick="showDogramMain()">✕</button>
+        </div>
+        <div id="dogram-sell-mini-wrap" style="display:flex;justify-content:center;margin:12px 0 8px"></div>
+        <p id="dogram-sell-msg" style="font-size:8px;color:#ffd080;text-align:center;margin-bottom:18px;line-height:1.8;white-space:pre-line"></p>
+        <div style="text-align:center;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <button class="pixel-btn small" id="btn-sell-cancel" onclick="showDogramMain()"></button>
+          <button class="pixel-btn small" id="btn-sell-confirm" onclick="doSellLizard()" style="background:#c03030;color:#fff"></button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -305,6 +319,18 @@
         style="display:block;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges;width:300px;height:130px"></canvas>
       <p id="mating-msg" style="font-size:7px;color:#f090c0;margin-top:10px;line-height:1.8;min-height:18px;margin-bottom:6px"></p>
       <button id="mating-close-btn" class="pixel-btn small" onclick="closeMatingModal()" style="display:none"></button>
+    </div>
+  </div>
+
+  <!-- Rehome confirm modal -->
+  <div id="rehome-modal" style="display:none">
+    <div class="modal-panel" style="max-width:320px;text-align:center">
+      <h2 id="rehome-title" style="margin-bottom:10px"></h2>
+      <p id="rehome-msg" style="font-size:8px;color:#ffd080;margin-bottom:18px;line-height:1.8;white-space:pre-line"></p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <button class="pixel-btn small" id="btn-rehome-cancel" onclick="cancelRehome()"></button>
+        <button class="pixel-btn small" id="btn-rehome-confirm" onclick="confirmRehome()" style="background:#8a3010;color:#ffd0a0"></button>
+      </div>
     </div>
   </div>
 
@@ -352,6 +378,10 @@ function updateGameLabels() {
   document.getElementById('btn-sleep').textContent = t('sleep_btn');
   document.getElementById('btn-farm').textContent = t('farm_btn');
   document.getElementById('btn-companion').textContent = t('companion_btn');
+  document.getElementById('btn-rehome').textContent = t('rehome_btn');
+  document.getElementById('rehome-title').textContent = t('rehome_confirm_title');
+  document.getElementById('btn-rehome-cancel').textContent = t('rehome_cancel');
+  document.getElementById('btn-rehome-confirm').textContent = t('rehome_do');
   document.getElementById('companion-modal-title').textContent = t('companion_title');
   document.getElementById('mating-close-btn').textContent = t('companion_close');
   document.getElementById('btn-leave-outdoor').textContent = t('dandelion_complete_btn');

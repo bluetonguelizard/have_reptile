@@ -86,6 +86,13 @@ function newGameState(type) {
     hasUnfertilizedEgg: false,
     lastUnfertilizedEggLayDay: -30,
     unfertilizedEggNotified: false,
+    lastMatingDay: null,      // game day when last successful mating occurred
+    matedNotified: false,     // whether the "pregnant" notification was shown
+    fertilizedEggLayCount: 0, // how many fertilized clutches laid this cycle (max 6)
+    lastFertilizedEggLayDay: null, // game day of most recent fertilized clutch
+    isLonely: false,
+    lastLonelyDay: null,   // null = not yet adult; set to gameDaysPassed when adult first reached
+    lonelyNotified: false,
   };
 }
 
@@ -129,8 +136,8 @@ function saveGame() {
 }
 
 // ─── SLEEP HELPERS ───────────────────────────────────────────────────────────
-function isSleepyHour() { const h = new Date().getHours(); return h >= 21 || h < 6; }
-function isWakeHour()   { const h = new Date().getHours(); return h >= 6 && h < 21; }
+function isSleepyHour() { const h = new Date().getHours(); return h >= 0 && h < 6; }
+function isWakeHour()   { const h = new Date().getHours(); return h >= 6 && h < 24; }
 
 // ─── TIME ───────────────────────────────────────────────────────────────────
 function updateGameTime() {
@@ -155,16 +162,41 @@ function updateGameTime() {
     if (!gs.isAdult && gs.gameDaysPassed >= ADULT_GAME_DAYS) {
       gs.isAdult = true;
     }
-    // Egg laying for adult females
-    if (gs.isAdult && gs.gender === 'female' && !gs.hasEgg) {
-      const eggCooldown = gs.type === 'crestie' ? 30 : 60;
-      const lastLay = (gs.lastEggLayDay !== undefined && gs.lastEggLayDay !== null) ? gs.lastEggLayDay : -(eggCooldown);
-      if (gs.gameDaysPassed - lastLay >= eggCooldown) {
-        gs.hasEgg = true;
+    // Initialize loneliness cooldown the first day adult is reached
+    if (gs.isAdult && gs.lastLonelyDay === null) {
+      gs.lastLonelyDay = gs.gameDaysPassed;
+    }
+    // Loneliness: female every 15 days, male every 4 days
+    if (gs.isAdult && gs.gender && !gs.isLonely) {
+      const lonelyCooldown = gs.gender === 'female' ? 15 : 4;
+      if (gs.gameDaysPassed - (gs.lastLonelyDay || gs.gameDaysPassed) >= lonelyCooldown) {
+        gs.isLonely = true;
+        gs.lonelyNotified = false;
       }
     }
-    // Unfertilized egg laying for juvenile (준성체) female cresties
-    if (gs.type === 'crestie' && gs.isJuvenile && !gs.isAdult && gs.gender === 'female' && !gs.hasUnfertilizedEgg) {
+    // Extra happy decay when lonely
+    if (gs.isLonely) {
+      gs.happy = Math.max(0, gs.happy - daysElapsed * 3);
+    }
+    // Fertilized egg/birth for adult females
+    // Crestie: clutch every 45 days, up to 6 clutches
+    // BT: live birth ~100 days after mating (viviparous, single litter)
+    if (gs.isAdult && gs.gender === 'female' && !gs.hasEgg && gs.lastMatingDay !== null) {
+      const isBT = gs.type === 'bluetongue';
+      const gestationDays = isBT ? 100 : 45;
+      const lastLayRef = (gs.lastFertilizedEggLayDay !== null && gs.lastFertilizedEggLayDay !== undefined)
+        ? gs.lastFertilizedEggLayDay
+        : gs.lastMatingDay;
+      if (gs.gameDaysPassed - lastLayRef >= gestationDays) {
+        gs.hasEgg = true;
+        // count & lastFertilizedEggLayDay updated when egg is collected
+      }
+    }
+    // Unfertilized egg laying for female cresties (juvenile 준성체, or adult without mating)
+    const canLayUnfertilized = gs.type === 'crestie' && gs.gender === 'female'
+      && (gs.isJuvenile || (gs.isAdult && gs.lastMatingDay === null))
+      && !gs.hasUnfertilizedEgg && !gs.hasEgg;
+    if (canLayUnfertilized) {
       const lastLay = (gs.lastUnfertilizedEggLayDay !== undefined && gs.lastUnfertilizedEggLayDay !== null) ? gs.lastUnfertilizedEggLayDay : -30;
       if (gs.gameDaysPassed - lastLay >= 30) {
         gs.hasUnfertilizedEgg = true;
@@ -1427,6 +1459,11 @@ function drawUI() {
   if (companionBtn) {
     companionBtn.style.display = gs.isAdult ? '' : 'none';
   }
+  // Rehome button — hide while sleeping
+  const rehomeBtn = document.getElementById('btn-rehome');
+  if (rehomeBtn) {
+    rehomeBtn.style.display = gs.isSleeping ? 'none' : '';
+  }
 }
 
 function showMsg(text, duration=2500) {
@@ -1525,6 +1562,12 @@ function doSleep() {
 function doFindCompanion() {
   if (!gs || !gs.bornAnim) return;
   if (!gs.isAdult) { showMsg(t('companion_msg_no_adult'), 3000); return; }
+  // BT breeding season: December~April only
+  if (gs.type === 'bluetongue') {
+    const gd = getGameDate();
+    const inSeason = gd.month === 12 || gd.month <= 4;
+    if (!inSeason) { showMsg(t('bt_no_breed_season'), 4000); return; }
+  }
   openCompanionModal();
 }
 
@@ -1597,12 +1640,19 @@ function closeCompanionModal() {
 // ─── MATING ANIMATION ────────────────────────────────────────────────────────
 let _matingAnimId = null;
 let _matingTick   = 0;
-const MATING_TOTAL  = 160;
-const MATING_KISS   = 65; // frame when snouts meet
+const MATING_TOTAL  = 200;
+const MATING_KISS   = 65;  // frame when snouts meet
+const MATING_FAIL_BACK = 95; // frame when avoider fully retreats (fail only)
 
 function startMatingAnim(partnerIdx) {
   const partner = allLizards[partnerIdx];
   _matingTick = 0;
+
+  // Randomly decide outcome and which lizard avoids (if fail)
+  // 60% success, 40% failure
+  const matingSuccess = Math.random() < 0.6;
+  // 0 = left lizard (mine) avoids, 1 = right lizard (partner) avoids
+  const avoider = Math.random() < 0.5 ? 0 : 1;
 
   const modal = document.getElementById('mating-modal');
   modal.style.display = 'flex';
@@ -1633,6 +1683,10 @@ function startMatingAnim(partnerIdx) {
 
   if (_matingAnimId) { cancelAnimationFrame(_matingAnimId); _matingAnimId = null; }
 
+  function easeInOut(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+
   function drawFrame() {
     const mCtx = mCanvas.getContext('2d');
     mCtx.imageSmoothingEnabled = false;
@@ -1641,7 +1695,7 @@ function startMatingAnim(partnerIdx) {
     mCtx.fillStyle = '#180810';
     mCtx.fillRect(0, 0, W, H);
     // Hearts pattern on bg (static tiny hearts)
-    mCtx.fillStyle = '#2a0a18';
+    mCtx.fillStyle = matingSuccess ? '#2a0a18' : '#0e0e0e';
     for (let hx = 12; hx < W; hx += 30) {
       for (let hy = 10; hy < H * 0.6; hy += 24) {
         mCtx.fillRect(hx,   hy,   3, 2);
@@ -1657,58 +1711,99 @@ function startMatingAnim(partnerIdx) {
     mCtx.fillStyle = '#3a1830';
     mCtx.fillRect(0, Math.floor(H * 0.72), W, 2);
 
-    // -- Ease-in-out approach --
-    const t01 = Math.min(1, _matingTick / MATING_KISS);
-    const ease = t01 < 0.5 ? 2 * t01 * t01 : -1 + (4 - 2 * t01) * t01;
+    // ── Phase 1: approach (both lizards close in) ──
+    // ── Phase 2 (fail): avoider backs away, other stays ──
+    // ── Phase 2 (success): kiss with hearts ──
 
-    const lx = lx_start + (lx_end - lx_start) * ease;
-    const rx = rx_start + (rx_end - rx_start) * ease;
+    let lx, rx;
+    let lFlipped = false; // true = left lizard faces left (turned away)
+    let rFlipped = true;  // right lizard normally mirrors; false = faces right (turned away)
+
+    if (_matingTick <= MATING_KISS) {
+      // Approach phase
+      const t01 = Math.min(1, _matingTick / MATING_KISS);
+      const ease = easeInOut(t01);
+      lx = lx_start + (lx_end - lx_start) * ease;
+      rx = rx_start + (rx_end - rx_start) * ease;
+    } else if (!matingSuccess) {
+      // Failure: avoider retreats, other stays at meeting point then backs off slowly
+      const failT = Math.min(1, (_matingTick - MATING_KISS) / (MATING_FAIL_BACK - MATING_KISS));
+      const failEase = easeInOut(failT);
+      if (avoider === 0) {
+        // Left lizard (mine) turns away
+        lx = lx_end + (lx_start - lx_end) * failEase;
+        lFlipped = true; // facing left = turned away
+        rx = rx_end + (rx_start - rx_end) * failEase * 0.4; // right follows slowly
+      } else {
+        // Right lizard (partner) turns away
+        rx = rx_end + (rx_start - rx_end) * failEase;
+        rFlipped = false; // facing right = turned away
+        lx = lx_end + (lx_start - lx_end) * failEase * 0.4; // left follows slowly
+      }
+    } else {
+      // Success: both stay at kiss position
+      lx = lx_end;
+      rx = rx_end;
+    }
 
     const savedCtx = ctx;
     ctx = mCtx;
 
-    // Left lizard — faces right (normal)
+    // Left lizard
     mCtx.save();
     mCtx.translate(Math.round(lx), yOff);
-    mCtx.scale(sc, sc);
+    if (lFlipped) mCtx.scale(-sc, sc);
+    else          mCtx.scale(sc, sc);
     if (isC) drawCrestie(0, 0, mockAnim, { morph: gs.morph, color: gs.color, traits: gs.traits });
     else     drawBluetongue(0, 0, mockAnim, { morph: gs.morph, color: gs.color, traits: gs.traits });
     mCtx.restore();
 
-    // Right lizard — faces left (mirror via scale(-sc, sc))
+    // Right lizard
     mCtx.save();
     mCtx.translate(Math.round(rx), yOff);
-    mCtx.scale(-sc, sc);
+    if (rFlipped) mCtx.scale(-sc, sc);
+    else          mCtx.scale(sc, sc);
     if (partner.type === 'crestie') drawCrestie(0, 0, mockAnim, { morph: partner.morph, color: partner.color, traits: partner.traits });
     else                             drawBluetongue(0, 0, mockAnim, { morph: partner.morph, color: partner.color, traits: partner.traits });
     mCtx.restore();
 
     ctx = savedCtx;
 
-    // -- Hearts / kiss effect after meeting --
+    // ── Post-meet effects ──
     if (_matingTick >= MATING_KISS) {
-      const hp = (_matingTick - MATING_KISS) / (MATING_TOTAL - MATING_KISS); // 0→1
+      const kissY = yOff + (isC ? 6 : 8) * s * sc;
 
-      // Kiss sparkle at snout meeting point
-      const kissY = yOff + (isC ? 6 : 8) * s * sc; // approx mouth height
-      const sparkAlpha = Math.max(0, 1 - hp * 1.4);
-
-      mCtx.save();
-      mCtx.globalAlpha = sparkAlpha;
-      mCtx.font = `${Math.round(14 + 6 * Math.sin(hp * Math.PI))}px serif`;
-      mCtx.textAlign = 'center';
-      mCtx.textBaseline = 'middle';
-      // Main kiss mark — pulses and rises
-      mCtx.fillText('💋', centerX, kissY - hp * 22);
-
-      // Floating side hearts
-      mCtx.font = '11px serif';
-      mCtx.globalAlpha = Math.max(0, 0.9 - hp);
-      mCtx.fillText('❤', centerX - 22, kissY - 8  - hp * 28);
-      mCtx.fillText('❤', centerX + 24, kissY - 12 - hp * 24);
-      mCtx.globalAlpha = Math.max(0, 0.7 - hp);
-      mCtx.fillText('❤', centerX,      kissY - 18 - hp * 32);
-      mCtx.restore();
+      if (matingSuccess) {
+        // Hearts / kiss effect
+        const hp = (_matingTick - MATING_KISS) / (MATING_TOTAL - MATING_KISS); // 0→1
+        const sparkAlpha = Math.max(0, 1 - hp * 1.4);
+        mCtx.save();
+        mCtx.globalAlpha = sparkAlpha;
+        mCtx.font = `${Math.round(14 + 6 * Math.sin(hp * Math.PI))}px serif`;
+        mCtx.textAlign = 'center';
+        mCtx.textBaseline = 'middle';
+        mCtx.fillText('💋', centerX, kissY - hp * 22);
+        mCtx.font = '11px serif';
+        mCtx.globalAlpha = Math.max(0, 0.9 - hp);
+        mCtx.fillText('❤', centerX - 22, kissY - 8  - hp * 28);
+        mCtx.fillText('❤', centerX + 24, kissY - 12 - hp * 24);
+        mCtx.globalAlpha = Math.max(0, 0.7 - hp);
+        mCtx.fillText('❤', centerX,      kissY - 18 - hp * 32);
+        mCtx.restore();
+      } else {
+        // Sad effect: broken heart floats up briefly
+        const fp = Math.min(1, (_matingTick - MATING_KISS) / (MATING_TOTAL - MATING_KISS));
+        const sadAlpha = Math.max(0, 0.9 - fp * 1.2);
+        if (sadAlpha > 0) {
+          mCtx.save();
+          mCtx.globalAlpha = sadAlpha;
+          mCtx.font = `${Math.round(13 + 3 * Math.sin(fp * Math.PI))}px serif`;
+          mCtx.textAlign = 'center';
+          mCtx.textBaseline = 'middle';
+          mCtx.fillText('💔', centerX, kissY - fp * 28);
+          mCtx.restore();
+        }
+      }
     }
 
     _matingTick++;
@@ -1718,9 +1813,39 @@ function startMatingAnim(partnerIdx) {
     } else {
       _matingAnimId = null;
       document.getElementById('mating-close-btn').style.display = '';
-      // Small bond/happy boost for current lizard
-      gs.bond  = Math.min(100, gs.bond  + 3);
-      gs.happy = Math.min(100, gs.happy + 8);
+
+      const msgEl = document.getElementById('mating-msg');
+      if (matingSuccess) {
+        // Bond/happy boost
+        gs.bond  = Math.min(100, gs.bond  + 3);
+        gs.happy = Math.min(100, gs.happy + 8);
+        gs.isLonely = false;
+        gs.lastLonelyDay = gs.gameDaysPassed;
+        gs.lonelyNotified = false;
+        // Record mating day so female lays fertilized egg ~45 days later; reset cycle
+        if (gs.gender === 'female' && gs.isAdult) {
+          gs.lastMatingDay = gs.gameDaysPassed;
+          gs.fertilizedEggLayCount = 0;
+          gs.lastFertilizedEggLayDay = null;
+        } else if (partner && partner.gender === 'female' && partner.isAdult) {
+          partner.lastMatingDay = gs.gameDaysPassed;
+          partner.fertilizedEggLayCount = 0;
+          partner.lastFertilizedEggLayDay = null;
+        }
+        msgEl.textContent = t('mating_success');
+        msgEl.style.color = '#ffb0e0';
+      } else {
+        // Mating failed — lonely state persists
+        const avoiderName = avoider === 0
+          ? (gs.lizardName || '???')
+          : (partner.lizardName || '???');
+        const key = avoider === 0 ? 'mating_fail_left' : 'mating_fail_right';
+        const raw = t(key);
+        msgEl.textContent = raw
+          .replace('{name}', gs.lizardName || '???')
+          .replace('{partner}', partner.lizardName || '???');
+        msgEl.style.color = '#aaaaaa';
+      }
       saveGame();
     }
   }
@@ -1806,6 +1931,13 @@ function gameLoop(ts) {
       saveGame();
     }
     if (gs.bornAnim && !gs.hasUnfertilizedEgg) gs.unfertilizedEggNotified = false;
+    // Lonely notification
+    if (gs.bornAnim && gs.isLonely && !gs.lonelyNotified) {
+      gs.lonelyNotified = true;
+      showMsg(t('lonely_msg').replace('{name}', gs.lizardName || '???'), 5000);
+      saveGame();
+    }
+    if (gs.bornAnim && !gs.isLonely) gs.lonelyNotified = false;
     // Auto-wake in the morning
     if (gs.isSleeping && isWakeHour()) {
       gs.isSleeping = false;
@@ -1877,6 +2009,7 @@ window.addEventListener('load', () => {
   let lastSleepyMsgTime = 0;
   let lastThirstyMsgTime = 0;
   let lastHungryMsgTime = 0;
+  let lastLonelyMsgTime = 0;
   setInterval(() => {
     if (scene === SCENE.ROOM && gs) {
       updateGameTime();
@@ -1904,6 +2037,13 @@ window.addEventListener('load', () => {
         if (now - lastHungryMsgTime > 90000) {
           lastHungryMsgTime = now;
           showMsg(t('hungry_msg'), 4000);
+        }
+      }
+      // Show lonely message periodically when adult and lonely (every 90s)
+      if (gs.bornAnim && !gs.isSleeping && gs.isLonely) {
+        if (now - lastLonelyMsgTime > 90000) {
+          lastLonelyMsgTime = now;
+          showMsg(t('lonely_periodic_msg'), 4000);
         }
       }
       // Show spring message when game month enters April (once per game year)
@@ -2962,6 +3102,11 @@ function showDogramMain() {
   document.getElementById('dogram-main-view').style.display = '';
   document.getElementById('dogram-add-view').style.display = 'none';
   document.getElementById('dogram-country-view').style.display = 'none';
+  document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-color-view').style.display = 'none';
+  document.getElementById('dogram-trait-view').style.display = 'none';
+  document.getElementById('dogram-sell-view').style.display = 'none';
+  renderDogram();
 }
 
 const ADOPT_COST = 20;
@@ -3376,6 +3521,151 @@ function switchToLizard(idx) {
   updateGameLabels();
 }
 
+let _sellTargetIdx = null;
+
+function calcSellPrice(lizardGs) {
+  let price = 10; // base
+  // Rare morphs give bonus
+  const rareMorphs = ['lilly_white', 'azantic', 'sable', 'cappuccino', 'hypo', 'caramel', 'leucistic', 'melanistic', 'amelanistic', 'albino'];
+  if (lizardGs.morph && rareMorphs.includes(lizardGs.morph)) price += 10;
+  // Traits bonus
+  if (lizardGs.traits && lizardGs.traits.length > 0) price += lizardGs.traits.length * 5;
+  // Age bonus
+  if (lizardGs.isAdult) price += 15;
+  else if ((lizardGs.gameDaysPassed || 0) >= 270) price += 8;
+  else if ((lizardGs.gameDaysPassed || 0) >= 90) price += 4;
+  // Bond bonus
+  if ((lizardGs.bond || 0) >= 80) price += 5;
+  return price;
+}
+
+function showSellConfirm(idx) {
+  if (allLizards.length <= 1) {
+    showMsg(t('dogram_sell_only_one'));
+    return;
+  }
+  _sellTargetIdx = idx;
+  const lizardGs = allLizards[idx];
+  const price = calcSellPrice(lizardGs);
+  const name = lizardGs.lizardName || '???';
+
+  // Hide all views, show sell view
+  document.getElementById('dogram-main-view').style.display = 'none';
+  document.getElementById('dogram-add-view').style.display = 'none';
+  document.getElementById('dogram-country-view').style.display = 'none';
+  document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-color-view').style.display = 'none';
+  document.getElementById('dogram-trait-view').style.display = 'none';
+  document.getElementById('dogram-sell-view').style.display = '';
+
+  document.getElementById('dogram-sell-title').textContent = t('dogram_sell_confirm_title');
+  document.getElementById('dogram-sell-msg').textContent =
+    t('dogram_sell_confirm_msg').replace('{name}', name).replace('{price}', price);
+  document.getElementById('btn-sell-cancel').textContent = t('dogram_sell_cancel');
+  document.getElementById('btn-sell-confirm').textContent = t('dogram_sell_confirm');
+
+  // Mini lizard preview
+  const wrap = document.getElementById('dogram-sell-mini-wrap');
+  wrap.innerHTML = '';
+  const mini = document.createElement('canvas');
+  mini.width = 120; mini.height = 80;
+  mini.className = 'dogram-mini-canvas';
+  wrap.appendChild(mini);
+  renderMiniLizard(mini, lizardGs);
+}
+
+function doSellLizard() {
+  if (_sellTargetIdx === null) return;
+  const idx = _sellTargetIdx;
+  _sellTargetIdx = null;
+  if (allLizards.length <= 1) {
+    showMsg(t('dogram_sell_only_one'));
+    showDogramMain();
+    return;
+  }
+  const lizardGs = allLizards[idx];
+  const price = calcSellPrice(lizardGs);
+  const name = lizardGs.lizardName || '???';
+
+  // Adjust active index before splice
+  const wasActive = activeLizardIdx === idx;
+  let newActive = activeLizardIdx;
+  if (wasActive) {
+    // Switch to next lizard (or previous if sold was last)
+    newActive = idx < allLizards.length - 1 ? idx : idx - 1;
+  } else if (activeLizardIdx > idx) {
+    newActive = activeLizardIdx - 1;
+  }
+
+  // Remove lizard from list
+  allLizards.splice(idx, 1);
+  activeLizardIdx = Math.max(0, Math.min(newActive, allLizards.length - 1));
+
+  // Load newly active lizard
+  gs = { ...newGameState('crestie'), ...allLizards[activeLizardIdx] };
+  lizardName = gs.lizardName || '';
+  lizardType = gs.type || null;
+  scene = gs.scene || SCENE.ROOM;
+  updateGameTime();
+
+  AUTH.saveAllLizards(allLizards, activeLizardIdx);
+  AUTH.saveAccountCoins(AUTH.getAccountCoins() + price);
+
+  closeDogram();
+  showMsg(t('dogram_sell_ok').replace('{name}', name).replace('{price}', price));
+
+  // Update UI for newly active lizard
+  const uiOverlay = document.getElementById('ui-overlay');
+  const dateDisplay = document.getElementById('date-display');
+  if (scene === SCENE.ROOM && gs) {
+    dateDisplay.style.display = 'block';
+    uiOverlay.style.display = gs.bornAnim ? 'flex' : 'none';
+  } else {
+    uiOverlay.style.display = 'none';
+    dateDisplay.style.display = 'none';
+  }
+  updateGameLabels();
+}
+
+// ─── REHOME (분양) ────────────────────────────────────────────────────────────
+function doRehome() {
+  if (!gs || !gs.bornAnim) return;
+  const name = lizardName || '???';
+  document.getElementById('rehome-msg').textContent = t('rehome_confirm_msg').replace('{name}', name);
+  document.getElementById('rehome-modal').style.display = 'flex';
+}
+
+function cancelRehome() {
+  document.getElementById('rehome-modal').style.display = 'none';
+}
+
+function confirmRehome() {
+  document.getElementById('rehome-modal').style.display = 'none';
+  const name = lizardName || '???';
+
+  // Remove current lizard from list
+  allLizards.splice(activeLizardIdx, 1);
+  if (activeLizardIdx >= allLizards.length && allLizards.length > 0) {
+    activeLizardIdx = allLizards.length - 1;
+  }
+
+  // Clear active state → go to egg shop
+  gs = null;
+  lizardType = null;
+  lizardName = '';
+  scene = SCENE.SHOP;
+
+  AUTH.saveAllLizards(allLizards, Math.max(0, activeLizardIdx));
+
+  // Hide room UI
+  document.getElementById('ui-overlay').style.display = 'none';
+  document.getElementById('date-display').style.display = 'none';
+  document.getElementById('time-display').style.display = 'none';
+
+  updateDogramButton();
+  showMsg(t('rehome_ok').replace('{name}', name), 3000);
+}
+
 function renderDogram() {
   const grid = document.getElementById('dogram-grid');
   grid.innerHTML = '';
@@ -3419,9 +3709,16 @@ function renderDogram() {
       `<div class="dogram-card-age">${stage} · ${days}${t('days_format')}</div>`;
     card.appendChild(info);
 
+    // Button row
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;justify-content:center;';
+
+    const hasSell = allLizards.length > 1;
+
     // Enter button
     const btn = document.createElement('button');
     btn.className = 'pixel-btn small dogram-enter-btn';
+    if (hasSell) btn.style.width = 'auto';
     if (isActive) {
       btn.textContent = t('dogram_current');
       btn.style.background = '#4ad94a';
@@ -3430,7 +3727,19 @@ function renderDogram() {
       btn.textContent = t('dogram_enter');
     }
     btn.onclick = () => switchToLizard(idx);
-    card.appendChild(btn);
+    btnRow.appendChild(btn);
+
+    // Rehome button — only shown when there are multiple lizards
+    if (hasSell) {
+      const sellBtn = document.createElement('button');
+      sellBtn.className = 'pixel-btn small';
+      sellBtn.textContent = t('dogram_sell_btn') + ' (' + calcSellPrice(lizardGs) + ')';
+      sellBtn.style.cssText = 'background:#7a2020;color:#ffb0b0;';
+      sellBtn.onclick = () => showSellConfirm(idx);
+      btnRow.appendChild(sellBtn);
+    }
+
+    card.appendChild(btnRow);
 
     grid.appendChild(card);
     renderMiniLizard(miniCanvas, lizardGs);
@@ -3468,8 +3777,8 @@ function renderMiniLizard(miniCanvas, lizardGs) {
 
 // ─── INCUBATOR ────────────────────────────────────────────────────────────────
 const BASE_HATCH_MS = {
-  crestie: 70 * 13 * 60 * 1000,   // 70 game days base (22°C→~74d, 25°C→~62d)
-  bluetongue: 20 * 13 * 60 * 1000 // 20 game days (viviparous = shorter)
+  crestie: 70 * 13 * 60 * 1000,  // 70 game days base (22°C→~74d, 25°C→~62d)
+  bluetongue: 1 * 13 * 60 * 1000 // 1 game day (viviparous live birth — immediate collect)
 };
 // Humidity decreases 1% per 20 real minutes
 const HUMID_DECREASE_MS = 20 * 60 * 1000;
@@ -3506,9 +3815,16 @@ function updateIncubatorUI() {
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:6px;background:#0d1a0d;border:2px solid #2a5a2a;';
       const label = document.createElement('span');
       label.style.cssText = 'font-size:7px;color:#c8f0c8;';
-      label.textContent = (currentLang === 'ko')
-        ? `${l.lizardName || '???'}${isCrestie ? '의 알 🥚' : '의 새끼 🦎'}`
-        : `${l.lizardName || '???'}${isCrestie ? "'s egg 🥚" : "'s pup 🦎"}`;
+      if (isCrestie) {
+        const nextCount = (l.fertilizedEggLayCount || 0) + 1;
+        label.textContent = (currentLang === 'ko')
+          ? `${l.lizardName || '???'}의 알 🥚×2 (${nextCount}/6번째)`
+          : `${l.lizardName || '???'}'s eggs 🥚×2 (clutch ${nextCount}/6)`;
+      } else {
+        label.textContent = (currentLang === 'ko')
+          ? `${l.lizardName || '???'}의 새끼 🦎`
+          : `${l.lizardName || '???'}'s pup 🦎`;
+      }
       const btn = document.createElement('button');
       btn.className = 'pixel-btn small';
       btn.style.cssText = 'background:#d94a7a;color:#fff;';
@@ -3694,28 +4010,49 @@ function collectEgg(lizardIdx) {
   if (!lizard || !lizard.hasEgg) return;
   const eggs = AUTH.getIncubator();
   const isCrestie = lizard.type === 'crestie';
-  eggs.push({
-    id: Date.now() + Math.floor(Math.random() * 1000),
+  const now = Date.now();
+  const eggBase = {
     type: lizard.type,
     morph: lizard.morph || 'normal',
     color: lizard.color || null,
     traits: lizard.traits ? [...lizard.traits] : [],
     country: lizard.country || null,
     parentName: lizard.lizardName || '???',
-    placedRealTime: Date.now(),
+    placedRealTime: now,
     temp: 23,
     humid: 70,
-    lastHumidUpdate: Date.now(),
-  });
+    lastHumidUpdate: now,
+  };
+  // Cresties lay 2 eggs per clutch; BTs lay 1 pup
+  eggs.push({ ...eggBase, id: now + Math.floor(Math.random() * 1000) });
+  if (isCrestie) {
+    eggs.push({ ...eggBase, id: now + Math.floor(Math.random() * 1000) + 500 });
+  }
   AUTH.saveIncubator(eggs);
+
   lizard.hasEgg = false;
   lizard.lastEggLayDay = lizard.gameDaysPassed;
   lizard.eggNotified = false;
+
+  // Track fertilized clutch count for cresties; reset cycle after 6 clutches
+  if (isCrestie) {
+    lizard.fertilizedEggLayCount = (lizard.fertilizedEggLayCount || 0) + 1;
+    lizard.lastFertilizedEggLayDay = lizard.gameDaysPassed;
+    if (lizard.fertilizedEggLayCount >= 6) {
+      lizard.lastMatingDay = null;
+      lizard.fertilizedEggLayCount = 0;
+      lizard.lastFertilizedEggLayDay = null;
+    }
+  }
+
   allLizards[lizardIdx] = lizard;
   if (lizardIdx === activeLizardIdx) {
     gs.hasEgg = false;
     gs.lastEggLayDay = gs.gameDaysPassed;
     gs.eggNotified = false;
+    gs.fertilizedEggLayCount = lizard.fertilizedEggLayCount;
+    gs.lastFertilizedEggLayDay = lizard.lastFertilizedEggLayDay;
+    gs.lastMatingDay = lizard.lastMatingDay;
   }
   AUTH.saveAllLizards(allLizards, activeLizardIdx);
   showMsg(t(isCrestie ? 'incubator_egg_collected' : 'incubator_pup_collected'));
