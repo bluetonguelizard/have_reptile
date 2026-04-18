@@ -2606,6 +2606,184 @@ function drawFarmChicoryCanvas() {
   }
 }
 
+function drawSmallEggInCanvas(c, cx, baseY, type) {
+  const ew = 22, eh = 28;
+  const ey = baseY - eh;
+  const color  = type === 'orange' ? '#e87820' : '#5a7ab8';
+  const color2 = type === 'orange' ? '#d06010' : '#4a6aa8';
+  const shine  = type === 'orange' ? '#f0a050' : '#8ab0e0';
+  c.fillStyle = 'rgba(0,0,0,0.35)';
+  c.beginPath();
+  c.ellipse(cx, baseY + 3, ew * 0.5, 4, 0, 0, Math.PI * 2);
+  c.fill();
+  c.beginPath();
+  c.moveTo(cx, ey + 2);
+  c.bezierCurveTo(cx + ew * 0.75, ey, cx + ew * 0.5 + 8, baseY - eh * 0.38, cx, baseY);
+  c.bezierCurveTo(cx - ew * 0.5 - 8, baseY - eh * 0.38, cx - ew * 0.75, ey, cx, ey + 2);
+  c.fillStyle = color;
+  c.fill();
+  c.strokeStyle = color2;
+  c.lineWidth = 1.5;
+  c.stroke();
+  c.beginPath();
+  c.ellipse(cx - 5, ey + 8, 3, 5, -0.4, 0, Math.PI * 2);
+  c.fillStyle = shine;
+  c.globalAlpha = 0.5;
+  c.fill();
+  c.globalAlpha = 1;
+}
+
+function drawFarmIncubatorCanvas() {
+  const el = document.getElementById('farm-incubator-canvas');
+  if (!el) return;
+  const c = el.getContext('2d');
+  const W = el.width, H = el.height;
+  c.clearRect(0, 0, W, H);
+
+  // Background
+  c.fillStyle = '#0e0e1a';
+  c.fillRect(0, 0, W, H);
+
+  const bx = 8, by = 8, bw = 270, bh = 100;
+
+  // Drop shadow
+  c.fillStyle = 'rgba(0,0,0,0.45)';
+  c.fillRect(bx + 5, by + 5, bw, bh);
+
+  // Main body
+  c.fillStyle = '#7a6a58';
+  c.fillRect(bx, by, bw, bh);
+
+  // Top lid (lighter strip)
+  c.fillStyle = '#8a7a68';
+  c.fillRect(bx, by, bw, 22);
+
+  // Lid highlight edge
+  c.fillStyle = '#9a8a78';
+  c.fillRect(bx, by, bw, 3);
+
+  // Bottom shading
+  c.fillStyle = '#5a4a38';
+  c.fillRect(bx, by + bh - 8, bw, 8);
+
+  // Vent holes on top lid
+  c.fillStyle = '#4a3a28';
+  for (let i = 0; i < 7; i++) {
+    c.fillRect(bx + 22 + i * 18, by + 8, 10, 4);
+  }
+
+  // Brand label
+  c.fillStyle = '#b8a888';
+  c.font = "6px 'Press Start 2P', monospace";
+  c.textAlign = 'center';
+  c.fillText('REPTILE INC.', bx + 145, by + 18);
+  c.textAlign = 'left';
+
+  // === Glass viewing window ===
+  const wx = bx + 12, wy = by + 28, ww = 172, wh = 62;
+
+  // Window frame
+  c.fillStyle = '#3a2a18';
+  c.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
+  c.fillStyle = '#5a4a38';
+  c.fillRect(wx - 3, wy - 3, ww + 6, 3);
+  c.fillRect(wx - 3, wy - 3, 3, wh + 6);
+
+  // Interior
+  const eggs = (typeof AUTH !== 'undefined' && AUTH.getIncubator) ? AUTH.getIncubator() : [];
+  const hasEggs = eggs.length > 0;
+  c.fillStyle = hasEggs ? '#3a2a0e' : '#221508';
+  c.fillRect(wx, wy, ww, wh);
+
+  if (hasEggs) {
+    // Warm glow from heating element
+    const grd = c.createRadialGradient(wx + ww / 2, wy + wh, 0, wx + ww / 2, wy + wh, wh * 1.6);
+    grd.addColorStop(0, 'rgba(255,130,30,0.45)');
+    grd.addColorStop(1, 'rgba(255,60,0,0)');
+    c.fillStyle = grd;
+    c.fillRect(wx, wy, ww, wh);
+  }
+
+  // Substrate bedding
+  c.fillStyle = '#4a3010';
+  c.fillRect(wx, wy + wh - 14, ww, 14);
+  c.fillStyle = '#5a4020';
+  c.fillRect(wx, wy + wh - 16, ww, 4);
+  // Bedding texture bumps
+  c.fillStyle = '#3a2208';
+  for (let i = 0; i < 8; i++) c.fillRect(wx + 8 + i * 20, wy + wh - 10, 12, 4);
+
+  // Draw eggs
+  const showCount = Math.min(eggs.length, 5);
+  if (showCount > 0) {
+    const spacing = ww / (showCount + 1);
+    for (let i = 0; i < showCount; i++) {
+      const eType = (eggs[i].lizardType === 'crestie') ? 'orange' : 'blue';
+      drawSmallEggInCanvas(c, wx + spacing * (i + 1), wy + wh - 16, eType);
+    }
+  }
+
+  // Glass reflection overlay
+  c.fillStyle = 'rgba(255,255,255,0.06)';
+  c.fillRect(wx, wy, ww, wh / 2);
+  c.fillStyle = 'rgba(255,255,255,0.10)';
+  c.fillRect(wx, wy, 3, wh);
+  c.fillRect(wx, wy, ww, 2);
+
+  // === Control panel (right side) ===
+  const px = bx + 196, py = by + 28, pw = 70, ph = 62;
+
+  // Panel background
+  c.fillStyle = '#2e2820';
+  c.fillRect(px, py, pw, ph);
+
+  // Temperature display frame
+  c.fillStyle = '#111008';
+  c.fillRect(px + 4, py + 5, pw - 8, 20);
+  const temp = hasEggs ? (eggs[0].temp || 23) : 23;
+  c.fillStyle = '#00ee70';
+  c.font = "10px 'Press Start 2P', monospace";
+  c.textAlign = 'center';
+  c.fillText(temp + '\u00b0C', px + pw / 2, py + 19);
+  c.fillStyle = '#667766';
+  c.font = "5px 'Press Start 2P', monospace";
+  c.fillText('TEMP', px + pw / 2, py + 30);
+
+  // Humidity display frame
+  c.fillStyle = '#111008';
+  c.fillRect(px + 4, py + 33, pw - 8, 16);
+  const humid = hasEggs ? (eggs[0].humidity || 65) : 65;
+  c.fillStyle = '#38b8ff';
+  c.font = "9px 'Press Start 2P', monospace";
+  c.textAlign = 'center';
+  c.fillText(humid + '%', px + pw / 2, py + 44);
+  c.fillStyle = '#556677';
+  c.font = "5px 'Press Start 2P', monospace";
+  c.fillText('HUM', px + pw / 2, py + 55);
+  c.textAlign = 'left';
+
+  // Power LED
+  c.fillStyle = hasEggs ? '#30ff50' : '#303030';
+  c.fillRect(px + pw / 2 - 3, py + ph - 8, 6, 6);
+  if (hasEggs) {
+    const lg = c.createRadialGradient(px + pw / 2, py + ph - 5, 0, px + pw / 2, py + ph - 5, 9);
+    lg.addColorStop(0, 'rgba(50,255,80,0.55)');
+    lg.addColorStop(1, 'rgba(50,255,80,0)');
+    c.fillStyle = lg;
+    c.beginPath();
+    c.arc(px + pw / 2, py + ph - 5, 9, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // Legs
+  c.fillStyle = '#3a2a18';
+  c.fillRect(bx + 18, by + bh, 10, 7);
+  c.fillRect(bx + bw - 28, by + bh, 10, 7);
+  c.fillStyle = '#2a1a08';
+  c.fillRect(bx + 18, by + bh + 5, 10, 2);
+  c.fillRect(bx + bw - 28, by + bh + 5, 10, 2);
+}
+
 // ─── FARM ACTIONS ─────────────────────────────────────────────────────────────
 let currentFarmTab = 'cricket';
 
@@ -2641,6 +2819,7 @@ function switchFarmTab(tab) {
   if (tab === 'incubator') updateIncubatorUI();
   drawFarmCricketCanvas();
   drawFarmChicoryCanvas();
+  if (tab === 'incubator') drawFarmIncubatorCanvas();
 }
 
 function updateFarmUI() {
@@ -4282,6 +4461,7 @@ function getEffectiveHatchMs(egg) {
 }
 
 function updateIncubatorUI() {
+  drawFarmIncubatorCanvas();
   const eggs = AUTH.getIncubator();
   const now = Date.now();
 
