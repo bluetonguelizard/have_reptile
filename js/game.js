@@ -19,6 +19,7 @@ let newLizardMorph = null; // temp: morph selected when adding new lizard
 let newLizardColor = null; // temp: color selected when adding new lizard (crestie only)
 let newLizardTraits = [];  // temp: traits selected when adding new lizard
 let newLizardCountry = null; // temp: country selected when adding new bluetongue ('australia'|'indonesia')
+let newLizardLocale = null;  // temp: btLocale for ajantics halmahera (locale separate from morph)
 let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
 let hatchingEggId = null; // egg id being named after hatch
 let rehomeAnimState = null; // { phase, timer, lizardGs, name } — drives handover animation
@@ -2374,10 +2375,12 @@ function confirmName() {
   if (newLizardMorph) newGs.morph = newLizardMorph;
   if (newLizardColor) newGs.color = newLizardColor;
   if (newLizardTraits.length > 0) newGs.traits = newLizardTraits.slice();
+  if (newLizardLocale) newGs.btLocale = newLizardLocale;
   newLizardMorph = null;
   newLizardColor = null;
   newLizardTraits = [];
   newLizardCountry = null;
+  newLizardLocale = null;
   allLizards.push({ ...newGs });
   activeLizardIdx = allLizards.length - 1;
   gs = newGs;
@@ -3317,6 +3320,7 @@ function showDogramMain() {
   document.getElementById('dogram-add-view').style.display = 'none';
   document.getElementById('dogram-country-view').style.display = 'none';
   document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-bt-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-sell-view').style.display = 'none';
@@ -3675,6 +3679,7 @@ function showDogramAdd() {
   document.getElementById('dogram-add-view').style.display = '';
   document.getElementById('dogram-country-view').style.display = 'none';
   document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-bt-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-add-title').textContent = t('dogram_add_title');
@@ -3695,6 +3700,7 @@ function pickNewLizardType(type) {
   newLizardColor = null;
   newLizardTraits = [];
   newLizardCountry = null;
+  newLizardLocale = null;
   if (type === 'bluetongue') {
     showDogramCountry();
   } else {
@@ -3706,6 +3712,7 @@ function showDogramCountry() {
   document.getElementById('dogram-add-view').style.display = 'none';
   document.getElementById('dogram-country-view').style.display = '';
   document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-bt-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-main-view').style.display = 'none';
@@ -3739,65 +3746,29 @@ function dogramMorphBack() {
 }
 
 function showDogramMorph() {
-  document.getElementById('dogram-add-view').style.display = 'none';
-  document.getElementById('dogram-country-view').style.display = 'none';
+  const allViews = ['dogram-add-view','dogram-country-view','dogram-bt-morph-view',
+    'dogram-color-view','dogram-trait-view','dogram-main-view'];
+  allViews.forEach(id => document.getElementById(id).style.display = 'none');
   document.getElementById('dogram-morph-view').style.display = '';
-  document.getElementById('dogram-color-view').style.display = 'none';
-  document.getElementById('dogram-trait-view').style.display = 'none';
-  document.getElementById('dogram-main-view').style.display = 'none';
   const isBT = newLizardType === 'bluetongue';
-  document.getElementById('dogram-morph-title').textContent = t(isBT ? 'dogram_bt_select_title' : 'dogram_morph_title');
+  document.getElementById('dogram-morph-title').textContent = t(isBT ? 'dogram_locale_select_title' : 'dogram_morph_title');
   document.getElementById('dogram-morph-subtitle').textContent = t(isBT ? 'dogram_locale_subtitle' : 'dogram_morph_subtitle');
   document.getElementById('btn-dogram-morph-back').textContent = t('dogram_back');
 
   const btns = document.getElementById('dogram-morph-btns');
   btns.innerHTML = '';
 
-  function makeMorphBtn(id, bgColor) {
-    const btn = document.createElement('button');
-    btn.className = 'pixel-btn dogram-type-btn';
-    btn.textContent = t('morph_' + id);
-    btn.style.background = bgColor;
-    btn.style.color = '#fff';
-    btn.onclick = () => pickNewLizardMorph(id);
-    return btn;
-  }
-
   if (isBT) {
     const locales = BT_LOCALES_BY_COUNTRY[newLizardCountry] || [];
-    const morphs = BT_MORPHS_BY_COUNTRY[newLizardCountry] || [];
-    if (locales.length) {
-      const lbl = document.createElement('div');
-      lbl.textContent = t('dogram_locale_title');
-      lbl.style.cssText = 'font-size:7px;color:#8ab88a;margin:6px 0 4px;text-align:center;';
-      btns.appendChild(lbl);
-      locales.forEach(id => btns.appendChild(makeMorphBtn(id, '#4a7a5a')));
-    }
-    if (morphs.length) {
-      const lbl = document.createElement('div');
-      lbl.textContent = t('dogram_morph_title');
-      lbl.style.cssText = 'font-size:7px;color:#c8a860;margin:8px 0 4px;text-align:center;';
-      btns.appendChild(lbl);
-      const BT_MORPH_COLORS = {
-        hypo:        '#d4a860',
-        caramel:     '#c87830',
-        leucistic:   '#e8e4d8',
-        melanistic:  '#181810',
-        patternless: '#a89870',
-        anerythristic: '#8a9090',
-        albino:        '#dcd4b8',
-        platinum:      '#b0b0a8',
-        sunglow:       '#f0d060',
-        snow:          '#e0e4e0',
-      };
-      const BT_MORPH_LIGHT = ['patternless', 'albino', 'anerythristic', 'platinum', 'sunglow', 'snow'];
-      morphs.forEach(id => {
-        const bg = BT_MORPH_COLORS[id] || '#8a6020';
-        const btn = makeMorphBtn(id, bg);
-        btn.style.color = BT_MORPH_LIGHT.includes(id) ? '#3a2a10' : '#fff';
-        btns.appendChild(btn);
-      });
-    }
+    locales.forEach(id => {
+      const btn = document.createElement('button');
+      btn.className = 'pixel-btn dogram-type-btn';
+      btn.textContent = t('morph_' + id);
+      btn.style.background = '#4a7a5a';
+      btn.style.color = '#fff';
+      btn.onclick = () => pickBtLocale(id);
+      btns.appendChild(btn);
+    });
   } else {
     const CRESTIE_MORPH_COLORS = {
       normal:      '#c07020',
@@ -3806,21 +3777,88 @@ function showDogramMorph() {
       sable:       '#5a5248',
       azantic:     '#7a8aaa',
     };
-    function makeCrestieMorphBtn(id) {
+    (LIZARD_MORPHS[newLizardType] || []).forEach(id => {
       const bg = CRESTIE_MORPH_COLORS[id] || '#c07020';
-      const light = ['lilly_white'].includes(id);
-      const btn = makeMorphBtn(id, bg);
-      btn.style.color = light ? '#3a2a10' : '#fff';
-      return btn;
+      const btn = document.createElement('button');
+      btn.className = 'pixel-btn dogram-type-btn';
+      btn.textContent = t('morph_' + id);
+      btn.style.background = bg;
+      btn.style.color = id === 'lilly_white' ? '#3a2a10' : '#fff';
+      btn.onclick = () => pickNewLizardMorph(id);
+      btns.appendChild(btn);
+    });
+  }
+}
+
+function pickBtLocale(locale) {
+  newLizardLocale = locale;
+  showDogramBtMorph();
+}
+
+function showDogramBtMorph() {
+  const allViews = ['dogram-add-view','dogram-country-view','dogram-morph-view',
+    'dogram-color-view','dogram-trait-view','dogram-main-view'];
+  allViews.forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById('dogram-bt-morph-view').style.display = '';
+  document.getElementById('dogram-bt-morph-title').textContent = t('dogram_morph_title');
+  document.getElementById('dogram-bt-morph-subtitle').textContent = t('dogram_bt_morph_subtitle');
+  document.getElementById('btn-dogram-bt-morph-back').textContent = t('dogram_back');
+
+  const btns = document.getElementById('dogram-bt-morph-btns');
+  btns.innerHTML = '';
+
+  const BT_MORPH_COLORS = {
+    hypo:          '#d4a860',
+    caramel:       '#c87830',
+    leucistic:     '#e8e4d8',
+    melanistic:    '#181810',
+    patternless:   '#a89870',
+    anerythristic: '#8a9090',
+    albino:        '#dcd4b8',
+    platinum:      '#b0b0a8',
+    sunglow:       '#f0d060',
+    snow:          '#e0e4e0',
+    ajantics:      '#383848',
+  };
+  const BT_MORPH_LIGHT = ['patternless', 'albino', 'anerythristic', 'platinum', 'sunglow', 'snow', 'leucistic'];
+
+  function makeBtMorphBtn(morph, bgColor, label, desc) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;';
+    const btn = document.createElement('button');
+    btn.className = 'pixel-btn dogram-type-btn';
+    btn.textContent = label;
+    btn.style.background = bgColor;
+    btn.style.color = BT_MORPH_LIGHT.includes(morph) ? '#3a2a10' : '#fff';
+    btn.onclick = () => { newLizardMorph = morph; showDogramTrait(); };
+    wrap.appendChild(btn);
+    if (desc) {
+      const d = document.createElement('div');
+      d.textContent = desc;
+      d.style.cssText = 'font-size:6px;color:#aaa;text-align:center;';
+      wrap.appendChild(d);
     }
-    (LIZARD_MORPHS[newLizardType] || []).forEach(id => btns.appendChild(makeCrestieMorphBtn(id)));
+    return wrap;
+  }
+
+  // Normal (locale palette)
+  if (newLizardLocale === 'halmahera') {
+    btns.appendChild(makeBtMorphBtn('halmahera', '#4a3a18', t('halma_normal'), t('halma_normal_desc')));
+    btns.appendChild(makeBtMorphBtn('ajantics',  '#383848', t('halma_ajantics'), t('halma_ajantics_desc')));
+  } else {
+    btns.appendChild(makeBtMorphBtn(newLizardLocale, '#4a7a5a', t('dogram_bt_morph_normal'), null));
+    const morphs = BT_MORPHS_BY_COUNTRY[newLizardCountry] || [];
+    morphs.forEach(id => {
+      const bg = BT_MORPH_COLORS[id] || '#8a6020';
+      btns.appendChild(makeBtMorphBtn(id, bg, t('morph_' + id), null));
+    });
   }
 }
 
 function pickNewLizardMorph(morph) {
   newLizardMorph = morph;
   if (newLizardType === 'crestie') {
-    showDogramColor(); // 크레스티: 모프 선택 후 컬러 선택
+    showDogramColor();
   } else {
     showDogramTrait();
   }
@@ -3828,6 +3866,7 @@ function pickNewLizardMorph(morph) {
 
 function showDogramColor() {
   document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-bt-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = '';
   document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-main-view').style.display = 'none';
@@ -3854,8 +3893,8 @@ function pickNewLizardColor(colorId) {
 }
 
 function showDogramColorOrMorph() {
-  // 크레스티: 모프 → 컬러 → 특성 순서
-  showDogramMorph();
+  if (newLizardType === 'bluetongue') showDogramBtMorph();
+  else showDogramColor();
 }
 
 function tTrait(trait, lizardType) {
@@ -3865,6 +3904,7 @@ function tTrait(trait, lizardType) {
 
 function showDogramTrait() {
   document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-bt-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = '';
   document.getElementById('dogram-trait-title').textContent = t('dogram_trait_title');
@@ -3986,6 +4026,7 @@ function showSellConfirm(idx) {
   document.getElementById('dogram-add-view').style.display = 'none';
   document.getElementById('dogram-country-view').style.display = 'none';
   document.getElementById('dogram-morph-view').style.display = 'none';
+  document.getElementById('dogram-bt-morph-view').style.display = 'none';
   document.getElementById('dogram-color-view').style.display = 'none';
   document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-sell-view').style.display = '';
