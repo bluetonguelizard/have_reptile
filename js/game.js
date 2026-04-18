@@ -20,6 +20,7 @@ let newLizardColor = null; // temp: color selected when adding new lizard (crest
 let newLizardTraits = [];  // temp: traits selected when adding new lizard
 let newLizardCountry = null; // temp: country selected when adding new bluetongue ('australia'|'indonesia')
 let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
+let hatchingEggId = null; // egg id being named after hatch
 
 // Pixel art colors
 const C = {
@@ -79,6 +80,9 @@ function newGameState(type) {
     dandelionStock: 0,
     lastDandelionGatherDay: -1,
     springNotifiedYear: 0,
+    lastEggLayDay: -30,
+    hasEgg: false,
+    eggNotified: false,
   };
 }
 
@@ -147,6 +151,14 @@ function updateGameTime() {
     }
     if (!gs.isAdult && gs.gameDaysPassed >= ADULT_GAME_DAYS) {
       gs.isAdult = true;
+    }
+    // Egg laying for adult females
+    if (gs.isAdult && gs.gender === 'female' && !gs.hasEgg) {
+      const eggCooldown = gs.type === 'crestie' ? 30 : 60;
+      const lastLay = (gs.lastEggLayDay !== undefined && gs.lastEggLayDay !== null) ? gs.lastEggLayDay : -(eggCooldown);
+      if (gs.gameDaysPassed - lastLay >= eggCooldown) {
+        gs.hasEgg = true;
+      }
     }
     // Cricket auto-breeding every 3 game days
     if ((gs.cricketCount || 0) > 0) {
@@ -1552,6 +1564,13 @@ function gameLoop(ts) {
       showMsg(t('adult_msg'), 5000);
       saveGame();
     }
+    // Egg / pup laid notification
+    if (gs.bornAnim && gs.hasEgg && !gs.eggNotified) {
+      gs.eggNotified = true;
+      showMsg(t(gs.type === 'crestie' ? 'egg_laid_msg' : 'pup_born_msg'), 5000);
+      saveGame();
+    }
+    if (gs.bornAnim && !gs.hasEgg) gs.eggNotified = false;
     // Auto-wake in the morning
     if (gs.isSleeping && isWakeHour()) {
       gs.isSleeping = false;
@@ -1749,6 +1768,7 @@ function confirmName() {
   const name = document.getElementById('lizard-name-input').value.trim();
   if (!name) return;
   document.getElementById('name-modal').style.display = 'none';
+  if (hatchingEggId !== null) { finishHatchEgg(name); return; }
   const type = newLizardType || lizardType;
   newLizardType = null;
   // Save current lizard if exists
@@ -2004,9 +2024,11 @@ function openFarm() {
   document.getElementById('farm-cricket-panel').style.display = '';
   document.getElementById('farm-chicory-panel').style.display = 'none';
   document.getElementById('farm-cgestie-panel').style.display = 'none';
+  document.getElementById('farm-incubator-panel').style.display = 'none';
   document.getElementById('tab-btn-cricket').className = 'tab-btn active';
   document.getElementById('tab-btn-chicory').className = 'tab-btn';
   document.getElementById('tab-btn-cgestie').className = 'tab-btn';
+  document.getElementById('tab-btn-incubator').className = 'tab-btn';
   updateFarmUI();
 }
 
@@ -2019,9 +2041,12 @@ function switchFarmTab(tab) {
   document.getElementById('farm-cricket-panel').style.display = tab === 'cricket' ? '' : 'none';
   document.getElementById('farm-chicory-panel').style.display = tab === 'chicory' ? '' : 'none';
   document.getElementById('farm-cgestie-panel').style.display = tab === 'cgestie' ? '' : 'none';
+  document.getElementById('farm-incubator-panel').style.display = tab === 'incubator' ? '' : 'none';
   document.getElementById('tab-btn-cricket').className = 'tab-btn' + (tab === 'cricket' ? ' active' : '');
   document.getElementById('tab-btn-chicory').className = 'tab-btn' + (tab === 'chicory' ? ' active' : '');
   document.getElementById('tab-btn-cgestie').className = 'tab-btn' + (tab === 'cgestie' ? ' active' : '');
+  document.getElementById('tab-btn-incubator').className = 'tab-btn' + (tab === 'incubator' ? ' active' : '');
+  if (tab === 'incubator') updateIncubatorUI();
   drawFarmCricketCanvas();
   drawFarmChicoryCanvas();
 }
@@ -2031,6 +2056,7 @@ function updateFarmUI() {
   document.getElementById('tab-btn-cricket').textContent = t('farm_tab_cricket');
   document.getElementById('tab-btn-chicory').textContent = t('farm_tab_chicory');
   document.getElementById('tab-btn-cgestie').textContent = t('farm_tab_cgestie');
+  document.getElementById('tab-btn-incubator').textContent = t('farm_tab_incubator');
   document.getElementById('lbl-cricket-count').textContent = t('cricket_count_label');
   document.getElementById('lbl-chicory-stage').textContent = t('chicory_stage_label');
   const inEconomy = gs && gs.gameDaysPassed >= ECONOMY_START_DAYS;
@@ -2802,8 +2828,8 @@ const LIZARD_MORPHS = {
   bluetongue: ['ajantics', 'patternless', 'melanistic', 'amelanistic', 'albino']
 };
 const BT_MORPHS_BY_COUNTRY = {
-  australia: ['hypo', 'caramel', 'leucistic', 'melanistic'],
-  indonesia: ['ajantics', 'patternless', 'melanistic', 'amelanistic', 'albino'],
+  australia: ['amelanistic', 'melanistic', 'albino', 'patternless'],
+  indonesia: ['azantic', 'patternless', 'melanistic', 'amelanistic', 'albino'],
 };
 const LIZARD_LOCALES = {
   bluetongue: ['northern', 'eastern', 'irian_jaya', 'merauke', 'halmahera', 'tanimbar', 'kei_island']
@@ -2826,6 +2852,10 @@ const LIZARD_COLORS = {
   ]
 };
 const LIZARD_TRAITS = ['flame', 'harlequin', 'pinstripe', 'dalmatian', 'patternless', 'high_yellow', 'hypo', 'bold', 'melanistic', 'extreme_harlequin'];
+const BT_TRAITS_BY_COUNTRY = {
+  australia: ['sunset'],
+  indonesia: [],
+};
 
 function showDogramAdd() {
   if (AUTH.getAccountCoins() < ADOPT_COST) {
@@ -2948,7 +2978,7 @@ function showDogramMorph() {
         amelanistic: '#d89030',
         albino:      '#dcd4b8',
       };
-      const BT_MORPH_LIGHT = ['hypo', 'leucistic', 'patternless', 'albino', 'caramel'];
+      const BT_MORPH_LIGHT = ['patternless', 'albino', 'amelanistic'];
       morphs.forEach(id => {
         const bg = BT_MORPH_COLORS[id] || '#8a6020';
         const btn = makeMorphBtn(id, bg);
@@ -3032,7 +3062,8 @@ function showDogramTrait() {
 
   const btns = document.getElementById('dogram-trait-btns');
   btns.innerHTML = '';
-  LIZARD_TRAITS.forEach(trait => {
+  const traitList = newLizardType === 'bluetongue' ? (BT_TRAITS_BY_COUNTRY[newLizardCountry] || []) : LIZARD_TRAITS;
+  traitList.forEach(trait => {
     const btn = document.createElement('button');
     btn.className = 'pixel-btn dogram-type-btn';
     btn.id = 'trait-btn-' + trait;
@@ -3048,7 +3079,8 @@ function toggleLizardTrait(trait) {
   const idx = newLizardTraits.indexOf(trait);
   if (idx >= 0) newLizardTraits.splice(idx, 1);
   else newLizardTraits.push(trait);
-  LIZARD_TRAITS.forEach(tr => {
+  const traitList = newLizardType === 'bluetongue' ? (BT_TRAITS_BY_COUNTRY[newLizardCountry] || []) : LIZARD_TRAITS;
+  traitList.forEach(tr => {
     const btn = document.getElementById('trait-btn-' + tr);
     if (!btn) return;
     const selected = newLizardTraits.includes(tr);
@@ -3197,4 +3229,256 @@ function renderMiniLizard(miniCanvas, lizardGs) {
   }
   ctx.restore();
   ctx = savedCtx;
+}
+
+// ─── INCUBATOR ────────────────────────────────────────────────────────────────
+const BASE_HATCH_MS = {
+  crestie: 30 * 13 * 60 * 1000,   // 30 game days
+  bluetongue: 20 * 13 * 60 * 1000 // 20 game days (viviparous = shorter)
+};
+
+function getEffectiveHatchMs(egg) {
+  const base = BASE_HATCH_MS[egg.type] || BASE_HATCH_MS.crestie;
+  const tempDiff = (egg.temp || 28) - 28;
+  return Math.round(base * (1 - tempDiff * 0.05));
+}
+
+function updateIncubatorUI() {
+  const eggs = AUTH.getIncubator();
+  const now = Date.now();
+
+  // --- Collect zone: lizards with eggs/pups ready ---
+  const collectZone = document.getElementById('incubator-collect-zone');
+  collectZone.innerHTML = '';
+  const readyLizards = allLizards.map((l, i) => ({ l, i })).filter(({ l }) => l.hasEgg);
+  if (readyLizards.length > 0) {
+    readyLizards.forEach(({ l, i }) => {
+      const isCrestie = l.type === 'crestie';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:6px;background:#0d1a0d;border:2px solid #2a5a2a;';
+      const label = document.createElement('span');
+      label.style.cssText = 'font-size:7px;color:#c8f0c8;';
+      label.textContent = (currentLang === 'ko')
+        ? `${l.lizardName || '???'}${isCrestie ? '의 알 🥚' : '의 새끼 🦎'}`
+        : `${l.lizardName || '???'}${isCrestie ? "'s egg 🥚" : "'s pup 🦎"}`;
+      const btn = document.createElement('button');
+      btn.className = 'pixel-btn small';
+      btn.style.cssText = 'background:#d94a7a;color:#fff;';
+      btn.textContent = t('incubator_collect_btn');
+      btn.onclick = () => collectEgg(i);
+      row.appendChild(label);
+      row.appendChild(btn);
+      collectZone.appendChild(row);
+    });
+    const hdr = document.createElement('p');
+    hdr.className = 'farm-info';
+    hdr.style.cssText = 'color:#d94a7a;margin-bottom:6px;';
+    hdr.textContent = t('incubator_collect_title');
+    collectZone.insertBefore(hdr, collectZone.firstChild);
+  }
+  document.getElementById('incubator-collect-divider').style.display = readyLizards.length > 0 ? '' : 'none';
+
+  // --- Incubating eggs list ---
+  const list = document.getElementById('incubator-eggs-list');
+  list.innerHTML = '';
+  const emptyMsg = document.getElementById('incubator-empty-msg');
+
+  if (eggs.length === 0 && readyLizards.length === 0) {
+    emptyMsg.style.display = '';
+    emptyMsg.textContent = t('incubator_empty');
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  if (eggs.length === 0) return;
+
+  const hdr2 = document.createElement('p');
+  hdr2.className = 'farm-info';
+  hdr2.style.cssText = 'color:#aaa;margin-bottom:8px;';
+  hdr2.textContent = t('incubator_title');
+  list.appendChild(hdr2);
+
+  eggs.forEach(egg => {
+    const effective = getEffectiveHatchMs(egg);
+    const elapsed = now - egg.placedRealTime;
+    const progress = Math.min(1, elapsed / effective);
+    const isReady = progress >= 1;
+    const remainSec = Math.max(0, Math.ceil((effective - elapsed) / 1000));
+    const remainMin = Math.floor(remainSec / 60);
+    const remainHr = Math.floor(remainMin / 60);
+    const remainStr = remainHr > 0
+      ? (currentLang === 'ko' ? `${remainHr}시간 ${remainMin % 60}분` : `${remainHr}h ${remainMin % 60}m`)
+      : (currentLang === 'ko' ? `${remainMin}분 ${remainSec % 60}초` : `${remainMin}m ${remainSec % 60}s`);
+
+    const isCrestie = egg.type === 'crestie';
+    const typeColor = isCrestie ? '#e87820' : '#5a8a6a';
+    const card = document.createElement('div');
+    card.style.cssText = `margin-bottom:10px;padding:8px;background:#0a0a1a;border:2px solid ${typeColor};`;
+
+    // Header row
+    const headRow = document.createElement('div');
+    headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;';
+    const titleSpan = document.createElement('span');
+    titleSpan.style.cssText = `font-size:7px;color:${typeColor};`;
+    const typeName = isCrestie ? t('type_crestie') : t('type_bt');
+    const morphStr = egg.morph ? t('morph_' + egg.morph) : '';
+    titleSpan.textContent = `${typeName}${morphStr ? ' · ' + morphStr : ''}`;
+    const parentSpan = document.createElement('span');
+    parentSpan.style.cssText = 'font-size:7px;color:#888;';
+    parentSpan.textContent = (currentLang === 'ko' ? '♀ ' : '♀ ') + (egg.parentName || '???');
+    headRow.appendChild(titleSpan);
+    headRow.appendChild(parentSpan);
+    card.appendChild(headRow);
+
+    // Progress bar
+    const pbWrap = document.createElement('div');
+    pbWrap.style.cssText = 'background:#1a1a2e;border:2px solid #333;height:10px;border-radius:3px;overflow:hidden;margin-bottom:4px;';
+    const pbFill = document.createElement('div');
+    pbFill.style.cssText = `height:100%;width:${Math.round(progress * 100)}%;background:${isReady ? '#4adb4a' : typeColor};transition:width 0.3s;`;
+    pbWrap.appendChild(pbFill);
+    card.appendChild(pbWrap);
+
+    // Status row
+    const statusRow = document.createElement('div');
+    statusRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;';
+    const statusSpan = document.createElement('span');
+    statusSpan.style.cssText = `font-size:7px;color:${isReady ? '#4adb4a' : '#aaa'};`;
+    statusSpan.textContent = isReady ? t('incubator_ready') : (t('incubator_progress').replace('{r}', remainStr));
+    const pctSpan = document.createElement('span');
+    pctSpan.style.cssText = 'font-size:7px;color:#888;';
+    pctSpan.textContent = Math.round(progress * 100) + '%';
+    statusRow.appendChild(statusSpan);
+    statusRow.appendChild(pctSpan);
+    card.appendChild(statusRow);
+
+    // Temp control row
+    const tempRow = document.createElement('div');
+    tempRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+    const tempLabel = document.createElement('span');
+    tempLabel.style.cssText = 'font-size:7px;color:#aaa;';
+    tempLabel.textContent = t('incubator_temp_label') + ': ' + (egg.temp || 28) + '°C';
+    const btnMinus = document.createElement('button');
+    btnMinus.className = 'pixel-btn small';
+    btnMinus.style.cssText = 'padding:3px 8px;font-size:8px;background:#333;color:#aaa;';
+    btnMinus.textContent = '-';
+    btnMinus.disabled = (egg.temp || 28) <= 25;
+    btnMinus.onclick = () => setEggTemp(egg.id, -1);
+    const btnPlus = document.createElement('button');
+    btnPlus.className = 'pixel-btn small';
+    btnPlus.style.cssText = 'padding:3px 8px;font-size:8px;background:#333;color:#aaa;';
+    btnPlus.textContent = '+';
+    btnPlus.disabled = (egg.temp || 28) >= 32;
+    btnPlus.onclick = () => setEggTemp(egg.id, +1);
+    tempRow.appendChild(tempLabel);
+    tempRow.appendChild(btnMinus);
+    tempRow.appendChild(btnPlus);
+    card.appendChild(tempRow);
+
+    // Hatch button
+    const hatchBtn = document.createElement('button');
+    hatchBtn.className = 'pixel-btn small' + (isReady ? ' green' : '');
+    hatchBtn.style.cssText = 'width:100%;' + (isReady ? '' : 'opacity:0.5;cursor:not-allowed;');
+    hatchBtn.textContent = t('incubator_hatch_btn');
+    hatchBtn.disabled = !isReady;
+    hatchBtn.onclick = () => hatchEgg(egg.id);
+    card.appendChild(hatchBtn);
+
+    list.appendChild(card);
+  });
+}
+
+function collectEgg(lizardIdx) {
+  const lizard = allLizards[lizardIdx];
+  if (!lizard || !lizard.hasEgg) return;
+  const eggs = AUTH.getIncubator();
+  const isCrestie = lizard.type === 'crestie';
+  eggs.push({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    type: lizard.type,
+    morph: lizard.morph || 'normal',
+    color: lizard.color || null,
+    traits: lizard.traits ? [...lizard.traits] : [],
+    country: lizard.country || null,
+    parentName: lizard.lizardName || '???',
+    placedRealTime: Date.now(),
+    temp: 28,
+  });
+  AUTH.saveIncubator(eggs);
+  lizard.hasEgg = false;
+  lizard.lastEggLayDay = lizard.gameDaysPassed;
+  lizard.eggNotified = false;
+  allLizards[lizardIdx] = lizard;
+  if (lizardIdx === activeLizardIdx) {
+    gs.hasEgg = false;
+    gs.lastEggLayDay = gs.gameDaysPassed;
+    gs.eggNotified = false;
+  }
+  AUTH.saveAllLizards(allLizards, activeLizardIdx);
+  showMsg(t(isCrestie ? 'incubator_egg_collected' : 'incubator_pup_collected'));
+  updateIncubatorUI();
+}
+
+function setEggTemp(eggId, delta) {
+  const eggs = AUTH.getIncubator();
+  const egg = eggs.find(e => e.id === eggId);
+  if (!egg) return;
+  egg.temp = Math.max(25, Math.min(32, (egg.temp || 28) + delta));
+  AUTH.saveIncubator(eggs);
+  updateIncubatorUI();
+}
+
+function hatchEgg(eggId) {
+  const eggs = AUTH.getIncubator();
+  const egg = eggs.find(e => e.id === eggId);
+  if (!egg) return;
+  const elapsed = Date.now() - egg.placedRealTime;
+  if (elapsed < getEffectiveHatchMs(egg)) { showMsg(t('incubator_not_ready')); return; }
+  hatchingEggId = eggId;
+  closeFarm();
+  document.getElementById('modal-title').textContent = t('incubator_hatch_name_title');
+  document.getElementById('modal-prompt').textContent = t('incubator_hatch_name_prompt');
+  document.getElementById('lizard-name-input').value = '';
+  document.getElementById('lizard-name-input').placeholder = t('name_placeholder');
+  document.getElementById('modal-confirm').textContent = t('name_btn');
+  document.getElementById('name-modal').style.display = 'flex';
+}
+
+function finishHatchEgg(name) {
+  const eggs = AUTH.getIncubator();
+  const eggIdx = eggs.findIndex(e => e.id === hatchingEggId);
+  hatchingEggId = null;
+  if (eggIdx < 0) return;
+  const egg = eggs[eggIdx];
+  eggs.splice(eggIdx, 1);
+  AUTH.saveIncubator(eggs);
+  // Save current lizard
+  if (gs) {
+    gs.scene = scene;
+    gs.type = lizardType;
+    gs.lizardName = lizardName;
+    allLizards[activeLizardIdx] = { ...gs };
+  }
+  // Create new lizard from egg
+  const newGs = newGameState(egg.type);
+  newGs.lizardName = name;
+  newGs.morph = egg.morph || 'normal';
+  if (egg.color) newGs.color = egg.color;
+  if (egg.traits && egg.traits.length > 0) newGs.traits = [...egg.traits];
+  if (egg.country) newGs.country = egg.country;
+  newGs.scene = SCENE.ROOM;
+  newGs.startRealTime = Date.now();
+  newGs.lastGameDayRealTime = Date.now();
+  allLizards.push({ ...newGs });
+  activeLizardIdx = allLizards.length - 1;
+  gs = newGs;
+  lizardType = newGs.type;
+  lizardName = name;
+  scene = SCENE.ROOM;
+  bornAnim = { phase: 0, timer: 0 };
+  AUTH.saveAllLizards(allLizards, activeLizardIdx);
+  document.getElementById('date-display').style.display = 'block';
+  document.getElementById('ui-overlay').style.display = 'none';
+  updateDogramButton();
+  updateGameLabels();
+  showMsg(t('incubator_hatched').replace('{name}', name), 5000);
 }

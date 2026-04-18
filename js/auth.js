@@ -98,5 +98,21 @@ const AUTH = {
       users[username].coins = amount;
       this.saveUsers(users);
     }
+  },
+  getIncubator() {
+    const name = localStorage.getItem('tgs_current');
+    if (!name) return [];
+    const users = this.getUsers();
+    const user = users[name];
+    return (user && user.incubator) ? user.incubator : [];
+  },
+  saveIncubator(eggs) {
+    const username = localStorage.getItem('tgs_current');
+    if (!username) return;
+    const users = this.getUsers();
+    if (users[username]) {
+      users[username].incubator = eggs;
+      this.saveUsers(users);
+    }
   }
 };

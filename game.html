@@ -86,6 +86,7 @@
         <button class="tab-btn active" id="tab-btn-cricket" onclick="switchFarmTab('cricket')"></button>
         <button class="tab-btn" id="tab-btn-cgestie" onclick="switchFarmTab('cgestie')"></button>
         <button class="tab-btn" id="tab-btn-chicory" onclick="switchFarmTab('chicory')"></button>
+        <button class="tab-btn" id="tab-btn-incubator" onclick="switchFarmTab('incubator')" style="color:#d94a7a"></button>
       </div>
       <!-- Cricket panel -->
       <div id="farm-cricket-panel">
@@ -176,6 +177,13 @@
             <button class="pixel-btn small" id="btn-sell-dandelion" onclick="doSellDandelion()" style="background:#e8c030;color:#1a1a1a"></button>
           </div>
         </div>
+      </div>
+      <!-- Incubator panel -->
+      <div id="farm-incubator-panel" style="display:none;max-height:420px;overflow-y:auto;">
+        <div id="incubator-collect-zone"></div>
+        <div id="incubator-collect-divider" style="border-top:1px solid #3a1a2a;margin:8px 0;display:none"></div>
+        <div id="incubator-eggs-list"></div>
+        <p id="incubator-empty-msg" class="farm-info" style="text-align:center;padding:20px 0;display:none"></p>
       </div>
     </div>
   </div>
