@@ -83,6 +83,9 @@ function newGameState(type) {
     lastEggLayDay: -30,
     hasEgg: false,
     eggNotified: false,
+    hasUnfertilizedEgg: false,
+    lastUnfertilizedEggLayDay: -30,
+    unfertilizedEggNotified: false,
   };
 }
 
@@ -158,6 +161,13 @@ function updateGameTime() {
       const lastLay = (gs.lastEggLayDay !== undefined && gs.lastEggLayDay !== null) ? gs.lastEggLayDay : -(eggCooldown);
       if (gs.gameDaysPassed - lastLay >= eggCooldown) {
         gs.hasEgg = true;
+      }
+    }
+    // Unfertilized egg laying for juvenile (준성체) female cresties
+    if (gs.type === 'crestie' && gs.isJuvenile && !gs.isAdult && gs.gender === 'female' && !gs.hasUnfertilizedEgg) {
+      const lastLay = (gs.lastUnfertilizedEggLayDay !== undefined && gs.lastUnfertilizedEggLayDay !== null) ? gs.lastUnfertilizedEggLayDay : -30;
+      if (gs.gameDaysPassed - lastLay >= 30) {
+        gs.hasUnfertilizedEgg = true;
       }
     }
     // Cricket auto-breeding every 3 game days
@@ -1567,10 +1577,19 @@ function gameLoop(ts) {
     // Egg / pup laid notification
     if (gs.bornAnim && gs.hasEgg && !gs.eggNotified) {
       gs.eggNotified = true;
-      showMsg(t(gs.type === 'crestie' ? 'egg_laid_msg' : 'pup_born_msg'), 5000);
+      const name = gs.lizardName || '???';
+      showMsg(t(gs.type === 'crestie' ? 'egg_laid_msg' : 'pup_born_msg').replace('{name}', name), 5000);
       saveGame();
     }
     if (gs.bornAnim && !gs.hasEgg) gs.eggNotified = false;
+    // Unfertilized egg notification
+    if (gs.bornAnim && gs.hasUnfertilizedEgg && !gs.unfertilizedEggNotified) {
+      gs.unfertilizedEggNotified = true;
+      const name = gs.lizardName || '???';
+      showMsg(t('unfertilized_egg_laid_msg').replace('{name}', name), 5000);
+      saveGame();
+    }
+    if (gs.bornAnim && !gs.hasUnfertilizedEgg) gs.unfertilizedEggNotified = false;
     // Auto-wake in the morning
     if (gs.isSleeping && isWakeHour()) {
       gs.isSleeping = false;
@@ -3233,14 +3252,27 @@ function renderMiniLizard(miniCanvas, lizardGs) {
 
 // ─── INCUBATOR ────────────────────────────────────────────────────────────────
 const BASE_HATCH_MS = {
-  crestie: 30 * 13 * 60 * 1000,   // 30 game days
+  crestie: 70 * 13 * 60 * 1000,   // 70 game days base (22°C→~74d, 25°C→~62d)
   bluetongue: 20 * 13 * 60 * 1000 // 20 game days (viviparous = shorter)
 };
+// Humidity decreases 1% per 20 real minutes
+const HUMID_DECREASE_MS = 20 * 60 * 1000;
+
+function getCurrentHumid(egg) {
+  const stored = egg.humid !== undefined ? egg.humid : 70;
+  const lastUpdate = egg.lastHumidUpdate || egg.placedRealTime;
+  const elapsed = Date.now() - lastUpdate;
+  return Math.max(0, stored - elapsed / HUMID_DECREASE_MS);
+}
 
 function getEffectiveHatchMs(egg) {
   const base = BASE_HATCH_MS[egg.type] || BASE_HATCH_MS.crestie;
-  const tempDiff = (egg.temp || 28) - 28;
-  return Math.round(base * (1 - tempDiff * 0.05));
+  // Optimal temp 23°C; ±6% per degree (range 22~25°C → ~62~74 game days)
+  const tempDiff = (egg.temp || 23) - 23;
+  let ms = Math.round(base * (1 - tempDiff * 0.06));
+  // Humidity penalty: below 60% slows hatching by 30%
+  if (getCurrentHumid(egg) < 60) ms = Math.round(ms * 1.3);
+  return ms;
 }
 
 function updateIncubatorUI() {
@@ -3276,7 +3308,35 @@ function updateIncubatorUI() {
     hdr.textContent = t('incubator_collect_title');
     collectZone.insertBefore(hdr, collectZone.firstChild);
   }
-  document.getElementById('incubator-collect-divider').style.display = readyLizards.length > 0 ? '' : 'none';
+  // Unfertilized eggs from juvenile cresties
+  const unfertilizedLizards = allLizards.map((l, i) => ({ l, i })).filter(({ l }) => l.hasUnfertilizedEgg);
+  if (unfertilizedLizards.length > 0) {
+    if (readyLizards.length === 0) {
+      const hdr = document.createElement('p');
+      hdr.className = 'farm-info';
+      hdr.style.cssText = 'color:#d94a7a;margin-bottom:6px;';
+      hdr.textContent = t('incubator_collect_title');
+      collectZone.appendChild(hdr);
+    }
+    unfertilizedLizards.forEach(({ l, i }) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:6px;background:#1a0d0d;border:2px solid #5a2a2a;';
+      const label = document.createElement('span');
+      label.style.cssText = 'font-size:7px;color:#f0c8c8;';
+      label.textContent = (currentLang === 'ko')
+        ? `${l.lizardName || '???'}의 무정란 🥚×2 (+2코인)`
+        : `${l.lizardName || '???'}'s unfertilized eggs 🥚×2 (+2 coins)`;
+      const btn = document.createElement('button');
+      btn.className = 'pixel-btn small';
+      btn.style.cssText = 'background:#a04040;color:#fff;';
+      btn.textContent = t('unfertilized_egg_collect_btn');
+      btn.onclick = () => collectUnfertilizedEgg(i);
+      row.appendChild(label);
+      row.appendChild(btn);
+      collectZone.appendChild(row);
+    });
+  }
+  document.getElementById('incubator-collect-divider').style.display = (readyLizards.length > 0 || unfertilizedLizards.length > 0) ? '' : 'none';
 
   // --- Incubating eggs list ---
   const list = document.getElementById('incubator-eggs-list');
@@ -3351,28 +3411,54 @@ function updateIncubatorUI() {
     statusRow.appendChild(pctSpan);
     card.appendChild(statusRow);
 
-    // Temp control row
+    // Temp control row (22~25°C)
+    const curTemp = egg.temp || 23;
     const tempRow = document.createElement('div');
-    tempRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+    tempRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px;';
     const tempLabel = document.createElement('span');
-    tempLabel.style.cssText = 'font-size:7px;color:#aaa;';
-    tempLabel.textContent = t('incubator_temp_label') + ': ' + (egg.temp || 28) + '°C';
+    tempLabel.style.cssText = 'font-size:7px;color:#aaa;flex:1;';
+    tempLabel.textContent = t('incubator_temp_label') + ': ' + curTemp + '°C';
     const btnMinus = document.createElement('button');
     btnMinus.className = 'pixel-btn small';
     btnMinus.style.cssText = 'padding:3px 8px;font-size:8px;background:#333;color:#aaa;';
     btnMinus.textContent = '-';
-    btnMinus.disabled = (egg.temp || 28) <= 25;
+    btnMinus.disabled = curTemp <= 22;
     btnMinus.onclick = () => setEggTemp(egg.id, -1);
     const btnPlus = document.createElement('button');
     btnPlus.className = 'pixel-btn small';
     btnPlus.style.cssText = 'padding:3px 8px;font-size:8px;background:#333;color:#aaa;';
     btnPlus.textContent = '+';
-    btnPlus.disabled = (egg.temp || 28) >= 32;
+    btnPlus.disabled = curTemp >= 25;
     btnPlus.onclick = () => setEggTemp(egg.id, +1);
     tempRow.appendChild(tempLabel);
     tempRow.appendChild(btnMinus);
     tempRow.appendChild(btnPlus);
     card.appendChild(tempRow);
+
+    // Humidity control row (60~80%)
+    const curHumid = Math.round(getCurrentHumid(egg));
+    const humidOk = curHumid >= 60 && curHumid <= 80;
+    const humidRow = document.createElement('div');
+    humidRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+    const humidLabel = document.createElement('span');
+    humidLabel.style.cssText = `font-size:7px;color:${humidOk ? '#aaa' : '#f55'};flex:1;`;
+    humidLabel.textContent = t('incubator_humid_label') + ': ' + curHumid + '%' + (humidOk ? '' : ' ⚠');
+    const mistBtn = document.createElement('button');
+    mistBtn.className = 'pixel-btn small';
+    mistBtn.style.cssText = 'padding:3px 8px;font-size:8px;background:#1a4a6a;color:#7cf;';
+    mistBtn.textContent = t('incubator_mist_btn') + ' 💧';
+    mistBtn.disabled = curHumid >= 80;
+    mistBtn.onclick = () => mistEgg(egg.id);
+    humidRow.appendChild(humidLabel);
+    humidRow.appendChild(mistBtn);
+    card.appendChild(humidRow);
+
+    if (!humidOk) {
+      const humidWarn = document.createElement('div');
+      humidWarn.style.cssText = 'font-size:7px;color:#f55;margin-bottom:4px;';
+      humidWarn.textContent = curHumid < 60 ? t('incubator_humid_low') : t('incubator_humid_range');
+      card.appendChild(humidWarn);
+    }
 
     // Hatch button
     const hatchBtn = document.createElement('button');
@@ -3401,7 +3487,9 @@ function collectEgg(lizardIdx) {
     country: lizard.country || null,
     parentName: lizard.lizardName || '???',
     placedRealTime: Date.now(),
-    temp: 28,
+    temp: 23,
+    humid: 70,
+    lastHumidUpdate: Date.now(),
   });
   AUTH.saveIncubator(eggs);
   lizard.hasEgg = false;
@@ -3418,11 +3506,42 @@ function collectEgg(lizardIdx) {
   updateIncubatorUI();
 }
 
+function collectUnfertilizedEgg(lizardIdx) {
+  const lizard = allLizards[lizardIdx];
+  if (!lizard || !lizard.hasUnfertilizedEgg) return;
+  const reward = 2; // 2 unfertilized eggs × 1 coin each
+  AUTH.saveAccountCoins(AUTH.getAccountCoins() + reward);
+  lizard.hasUnfertilizedEgg = false;
+  lizard.lastUnfertilizedEggLayDay = lizard.gameDaysPassed;
+  lizard.unfertilizedEggNotified = false;
+  allLizards[lizardIdx] = lizard;
+  if (lizardIdx === activeLizardIdx) {
+    gs.hasUnfertilizedEgg = false;
+    gs.lastUnfertilizedEggLayDay = gs.gameDaysPassed;
+    gs.unfertilizedEggNotified = false;
+  }
+  AUTH.saveAllLizards(allLizards, activeLizardIdx);
+  showMsg(t('unfertilized_egg_collected'), 4000);
+  updateIncubatorUI();
+  updateFarmUI();
+}
+
 function setEggTemp(eggId, delta) {
   const eggs = AUTH.getIncubator();
   const egg = eggs.find(e => e.id === eggId);
   if (!egg) return;
-  egg.temp = Math.max(25, Math.min(32, (egg.temp || 28) + delta));
+  egg.temp = Math.max(22, Math.min(25, (egg.temp || 23) + delta));
+  AUTH.saveIncubator(eggs);
+  updateIncubatorUI();
+}
+
+function mistEgg(eggId) {
+  const eggs = AUTH.getIncubator();
+  const egg = eggs.find(e => e.id === eggId);
+  if (!egg) return;
+  const current = getCurrentHumid(egg);
+  egg.humid = Math.min(80, current + 10);
+  egg.lastHumidUpdate = Date.now();
   AUTH.saveIncubator(eggs);
   updateIncubatorUI();
 }
