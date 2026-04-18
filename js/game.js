@@ -854,8 +854,150 @@ function drawBluetongueEggFace(cx, cy) {
 // ─── ROOM SCENE ──────────────────────────────────────────────────────────────
 let bornAnim = { phase: 0, timer: 0 }; // phase: 0=egg, 1=cracking, 2=born, 3=done
 let lizardAnim = { frame: 0, timer: 0, threatening: true, threatTimer: 300 };
+let eatAnim = { active: false, timer: 0, type: null }; // type: 'feed' | 'water'
 let introTimer = 0;
 let introShown = false;
+
+// Handling session state
+let handlingSession = {
+  active: false,
+  petsGiven: 0,
+  hearts: [],      // [{x, y, alpha, vy}]
+  petting: false,  // true briefly after each pet (hand moves down)
+  petTimer: 0,
+};
+
+function drawHandlingOverlay() {
+  const W = canvas.width, H = canvas.height;
+  // Lizard center: enclosure center area
+  const lizX = W / 2;
+  const lizY = lizardType === 'bluetongue' ? H * 0.55 : H * 0.52;
+
+  // Hand position: above lizard, moves down when petting
+  const handBaseY = lizY - 55;
+  const handY = handlingSession.petting ? handBaseY + 22 : handBaseY;
+  const handX = lizX + 10;
+
+  // Draw pixel-art hand (open palm facing down)
+  drawPixelHand(handX, handY);
+
+  // Pet count indicator
+  const maxPets = 4;
+  const given = handlingSession.petsGiven;
+  for (let i = 0; i < maxPets; i++) {
+    const dotX = lizX - (maxPets * 10) / 2 + i * 10 + 5;
+    const dotY = lizY + 28;
+    ctx.fillStyle = i < given ? '#f0d020' : '#555577';
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Floating hearts
+  for (const h of handlingSession.hearts) {
+    ctx.globalAlpha = h.alpha;
+    ctx.fillStyle = '#f06080';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('♥', h.x - 6, h.y);
+    ctx.globalAlpha = 1;
+  }
+
+  // Instruction text
+  if (given < maxPets) {
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#e8d0ff';
+    ctx.font = '7px "Press Start 2P", monospace';
+    const txt = t('handle_start');
+    ctx.fillText(txt, lizX - ctx.measureText(txt).width / 2, lizY + 46);
+    ctx.globalAlpha = 1;
+  }
+
+  // Click hit area: circle around lizard
+  // (visual hint: faint glow around lizard when active)
+  ctx.strokeStyle = 'rgba(240,210,255,0.25)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.ellipse(lizX, lizY - 10, 45, 28, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawPixelHand(cx, cy) {
+  // Simple pixel-art open hand (top-down, pointing down)
+  const s = 2; // pixel size
+  const pixels = [
+    // palm
+    [0,0],[1,0],[2,0],[3,0],[4,0],
+    [0,1],[1,1],[2,1],[3,1],[4,1],
+    [0,2],[1,2],[2,2],[3,2],[4,2],
+    // fingers
+    [0,-1],[2,-1],[4,-1],
+    [0,-2],[2,-2],[4,-2],
+    [0,-3],[2,-3],[4,-3],
+    [1,-1],[3,-1],
+    [1,-2],[3,-2],
+    // thumb (side)
+    [-1,0],[-1,1],
+  ];
+  ctx.fillStyle = '#f5d5a8';
+  for (const [px2, py] of pixels) {
+    ctx.fillRect(cx + px2 * s - 4, cy + py * s, s, s);
+  }
+  // Outline
+  ctx.fillStyle = '#c09060';
+  const outline = [
+    [-2,0],[-2,1],[5,0],[5,1],[5,2],
+    [-1,-1],[0,-4],[1,-3],[2,-4],[3,-3],[4,-4],[5,-1],
+    [0,3],[1,3],[2,3],[3,3],[4,3],
+  ];
+  for (const [px2, py] of outline) {
+    ctx.fillRect(cx + px2 * s - 4, cy + py * s, s, s);
+  }
+}
+
+function updateHandlingHearts(dt) {
+  for (const h of handlingSession.hearts) {
+    h.y += h.vy * dt * 0.04;
+    h.alpha -= dt * 0.001;
+  }
+  handlingSession.hearts = handlingSession.hearts.filter(h => h.alpha > 0);
+  if (handlingSession.petting) {
+    handlingSession.petTimer -= dt;
+    if (handlingSession.petTimer <= 0) handlingSession.petting = false;
+  }
+}
+
+function tryPetLizard(mx, my) {
+  if (!handlingSession.active) return false;
+  const W = canvas.width, H = canvas.height;
+  const lizX = W / 2;
+  const lizY = lizardType === 'bluetongue' ? H * 0.55 : H * 0.52;
+  const dx = mx - lizX, dy = my - (lizY - 10);
+  if (dx * dx / (50 * 50) + dy * dy / (32 * 32) > 1) return false;
+
+  handlingSession.petsGiven++;
+  handlingSession.petting = true;
+  handlingSession.petTimer = 300;
+  // Spawn heart
+  handlingSession.hearts.push({ x: lizX + (Math.random() - 0.5) * 40, y: lizY - 20, alpha: 1, vy: -1 });
+
+  if (handlingSession.petsGiven >= 4) {
+    // All 4 pets done — apply stats
+    setTimeout(() => {
+      if (!handlingSession.active) return;
+      handlingSession.active = false;
+      gs.handleCountToday++;
+      const bondGain = gs.bond < 30 ? 3 : (gs.bond < 60 ? 5 : 7);
+      gs.bond = Math.min(100, gs.bond + bondGain);
+      gs.happy = Math.min(100, gs.happy + 10);
+      if (gs.bond > 40) lizardAnim.threatening = false;
+      showMsg(t('handle_done') + bondGain);
+      saveGame();
+    }, 400);
+  }
+  return true;
+}
 
 function drawRoom() {
   const W = canvas.width, H = canvas.height;
@@ -927,9 +1069,16 @@ function drawRoom() {
   if (lizardType === 'crestie') drawCrestieEnclosure(W/2 - 180, H*0.15, W*0.75, H*0.48);
   else drawBluetongueEnclosure(W/2 - 200, H*0.15, W*0.8, H*0.48);
 
+  if (gs.bornAnim && eatAnim.active) drawEatDrinkAnim();
+
   // Born animation
   if (!gs.bornAnim) {
     drawBornAnim(W/2, H*0.38);
+  }
+
+  // Handling session overlay
+  if (gs.bornAnim && handlingSession.active) {
+    drawHandlingOverlay();
   }
 }
 
@@ -1671,16 +1820,89 @@ function showMsg(text, duration=2500) {
 function doHandle() {
   if (!gs || !gs.bornAnim) return;
   if (gs.handleCountToday >= 2) { showMsg(t('handle_no')); return; }
-  gs.handleCountToday++;
-  const bondGain = gs.bond < 30 ? 3 : (gs.bond < 60 ? 5 : 7);
-  gs.bond = Math.min(100, gs.bond + bondGain);
-  gs.happy = Math.min(100, gs.happy + 8);
-  if (gs.bond > 40) lizardAnim.threatening = false;
-  showMsg(t('handle_ok') + bondGain);
-  saveGame();
-  // Animate
-  lizardAnim.threatening = gs.bond < 40;
-  setTimeout(() => { lizardAnim.threatening = false; }, 1500);
+  if (handlingSession.active) return; // already in session
+  handlingSession.active = true;
+  handlingSession.petsGiven = 0;
+  handlingSession.hearts = [];
+  handlingSession.petting = false;
+  handlingSession.petTimer = 0;
+  showMsg(t('handle_start'), 3000);
+}
+
+function drawEatDrinkAnim() {
+  const tm = eatAnim.timer;
+  const isFeed = eatAnim.type === 'feed';
+  const W = canvas.width, H = canvas.height;
+
+  const alpha = tm < 300 ? tm / 300 : tm > 2200 ? Math.max(0, 1 - (tm - 2200) / 600) : 1;
+
+  const isC = lizardType === 'crestie';
+  const ex = isC ? W/2 - 180 : W/2 - 200;
+  const ey = H * 0.15;
+  const ew = isC ? W * 0.75 : W * 0.8;
+  const eh = H * 0.48;
+  const liz0x = ex + ew/2 + (isC ? -20 : -30);
+  const liz0y = ey + eh - (isC ? 90 : 95);
+  const s = 3;
+
+  const snoutX = isC ? liz0x + 20*s : liz0x + 28*s;
+  const snoutY = isC ? liz0y + 5*s  : liz0y + 7*s;
+  const bx = snoutX + 14;
+  const by = snoutY + 4;
+
+  ctx.globalAlpha = alpha;
+
+  // Bowl shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(bx - 13, by + 7, 26, 4);
+
+  if (isFeed) {
+    ctx.fillStyle = '#6B3E1C';
+    ctx.fillRect(bx - 11, by, 22, 9);
+    ctx.fillStyle = '#8B5E3C';
+    ctx.fillRect(bx - 11, by, 22, 4);
+    ctx.fillStyle = '#e87820'; ctx.fillRect(bx - 7, by + 2, 4, 4);
+    ctx.fillStyle = '#f8a848'; ctx.fillRect(bx - 2, by + 2, 3, 3);
+    ctx.fillStyle = '#4a8a2a'; ctx.fillRect(bx + 3, by + 3, 3, 3);
+  } else {
+    ctx.fillStyle = '#1e3a5a';
+    ctx.fillRect(bx - 11, by, 22, 9);
+    ctx.fillStyle = '#2a6a9a';
+    ctx.fillRect(bx - 11, by, 22, 4);
+    const shimOdd = Math.floor(tm / 200) % 2 === 0;
+    ctx.fillStyle = shimOdd ? '#7ad4f8' : '#5ab8e0';
+    ctx.fillRect(bx - 8, by + 2, 16, 4);
+    ctx.fillStyle = '#b0e8ff';
+    ctx.fillRect(bx - 5, by + 2, 3, 2);
+  }
+
+  // Floating particles
+  const pColors = ['#e87820', '#f8a848', '#4a8a2a', '#c87830', '#f0d020'];
+  for (let i = 0; i < 5; i++) {
+    const offset = tm - 200 + i * 120;
+    if (offset < 0) continue;
+    const progress = (offset % 600) / 600;
+    ctx.globalAlpha = alpha * (1 - progress);
+    const px_p = bx - 8 + (i * 7) % 20;
+    const py_p = by - progress * 28;
+    if (isFeed) {
+      ctx.fillStyle = pColors[i % pColors.length];
+      ctx.fillRect(Math.round(px_p), Math.round(py_p), 3, 3);
+    } else {
+      ctx.fillStyle = '#7ad4f8';
+      ctx.fillRect(Math.round(px_p), Math.round(py_p), 2, 4);
+    }
+  }
+
+  ctx.globalAlpha = alpha * 0.95;
+  ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
+  ctx.fillStyle = isFeed ? '#f8d048' : '#80d8f8';
+  const bobY = Math.sin(tm / 180) * 2;
+  const label = isFeed
+    ? (currentLang === 'ko' ? '냠냠!' : 'NOM!')
+    : (currentLang === 'ko' ? '쩝쩝!' : 'SIP!');
+  ctx.fillText(label, bx - 10, by - 18 + bobY);
+  ctx.globalAlpha = 1;
 }
 
 function doFeed() {
@@ -1711,6 +1933,7 @@ function doFeed() {
   gs.happy = Math.min(100, gs.happy + 10);
   if (lizardType === 'crestie') gs.weight = Math.min(50, gs.weight + 0.3);
   else gs.weight = Math.min(600, gs.weight + 4);
+  eatAnim = { active: true, timer: 0, type: 'feed' };
   showMsg(feedMsg);
   saveGame();
 }
@@ -1722,6 +1945,7 @@ function doWater() {
   gs.happy = Math.min(100, gs.happy + 5);
   gs.waterCountToday = (gs.waterCountToday || 0) + 1;
   const key = lizardType === 'crestie' ? 'water_ok' : 'water_ok_bt';
+  eatAnim = { active: true, timer: 0, type: 'water' };
   showMsg(t(key));
   saveGame();
 }
@@ -1768,6 +1992,9 @@ function openCompanionModal() {
   document.getElementById('companion-modal-title').textContent = t('companion_title');
 
   // Find same-type, opposite-gender, adult lizards (excluding current)
+  const isLillyWhite = m => m === 'lilly_white' || m === 'super_lilly_white';
+  const CAPPUCCINO_MORPHS = new Set(['cappuccino','super_cappuccino','frappuccino','luwak','triple_combo','cappuccino_azantic','cappuccino_choco']);
+  const isCappuccino = m => CAPPUCCINO_MORPHS.has(m);
   const partners = allLizards
     .map((l, i) => ({ l, i }))
     .filter(({ l, i }) =>
@@ -1775,7 +2002,9 @@ function openCompanionModal() {
       l.type === gs.type &&
       l.isAdult &&
       l.gender && gs.gender &&
-      l.gender !== gs.gender
+      l.gender !== gs.gender &&
+      !(isLillyWhite(gs.morph) && isLillyWhite(l.morph)) &&
+      !(isCappuccino(gs.morph) && isCappuccino(l.morph))
     );
 
   const list = document.getElementById('companion-list');
@@ -1784,7 +2013,21 @@ function openCompanionModal() {
 
   if (partners.length === 0) {
     noMsg.style.display = '';
-    noMsg.textContent = t('companion_no_partners');
+    const allSameLilly = allLizards.some((l, i) =>
+      i !== activeLizardIdx && l.type === gs.type && l.isAdult &&
+      l.gender && gs.gender && l.gender !== gs.gender &&
+      isLillyWhite(gs.morph) && isLillyWhite(l.morph)
+    );
+    const allSameCappuccino = allLizards.some((l, i) =>
+      i !== activeLizardIdx && l.type === gs.type && l.isAdult &&
+      l.gender && gs.gender && l.gender !== gs.gender &&
+      isCappuccino(gs.morph) && isCappuccino(l.morph)
+    );
+    noMsg.textContent = allSameLilly
+      ? t('companion_no_partners_lilly')
+      : allSameCappuccino
+        ? t('companion_no_partners_cappuccino')
+        : t('companion_no_partners');
   } else {
     noMsg.style.display = 'none';
     partners.forEach(({ l, i }) => {
@@ -2111,11 +2354,21 @@ function gameLoop(ts) {
         saveGame();
       }
     }
+    // Eat/drink animation tick
+    if (eatAnim.active) {
+      eatAnim.timer += dt;
+      if (eatAnim.timer > 2800) eatAnim = { active: false, timer: 0, type: null };
+    }
+
     // Threat animation oscillation
     lizardAnim.timer += dt;
     if (lizardAnim.timer > 3000) {
       lizardAnim.timer = 0;
       if (gs.bond < 40) lizardAnim.threatening = !lizardAnim.threatening;
+    }
+    // Handling session heart update
+    if (handlingSession.active || handlingSession.hearts.length > 0) {
+      updateHandlingHearts(dt);
     }
     // Juvenile notification (gender revealed)
     if (gs.isJuvenile && !gs.juvenileNotified) {
@@ -2279,6 +2532,12 @@ canvas_click = function(e) {
   const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
   const my = (e.clientY - rect.top) * (canvas.height / rect.height);
   const W = canvas.width, H = canvas.height;
+
+  // Handling session: intercept click
+  if (scene === SCENE.ROOM && handlingSession.active) {
+    tryPetLizard(mx, my);
+    return;
+  }
 
   if (scene === SCENE.OUTDOOR && outdoorState) {
     // Check bugs first — penalty on hit
@@ -3810,8 +4069,9 @@ function getCrestiePhenotype(g) {
 
   if (expressed.length === 1) {
     const locus = expressed[0];
-    // Homozygous co-dominant = super form
+    // Homozygous co-dominant = super form (super_cappuccino is suppressed — treated as cappuccino)
     if (CRESTIE_MORPH_LOCI[locus] === 'codominant' && (g[locus] || 0) === 2) {
+      if (locus === 'cappuccino') return 'cappuccino';
       return 'super_' + locus;
     }
     return locus;
@@ -4151,6 +4411,7 @@ function switchToLizard(idx) {
   // Reset animations for new lizard
   bornAnim = { phase: 0, timer: 0 };
   lizardAnim = { frame: 0, timer: 0, threatening: true, threatTimer: 300 };
+  eatAnim = { active: false, timer: 0, type: null };
   lizardName = gs.lizardName || '';
   lizardType = gs.type || null;
   scene = gs.scene || SCENE.ROOM;
