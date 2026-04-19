@@ -1569,7 +1569,8 @@ function drawBluetongue(x, y, anim, appearance) {
     ctx.fillStyle = '#000000';
     ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x+22*s, y+4*s, s, s);
+    ctx.fillRect(x+22*s, y+4*s, s, s);   // top-right glint
+    ctx.fillRect(x+20*s, y+6*s, s, s);   // bottom-left glint
   } else if (morph === 'halmahera') {
     // Bright amber eye with large highlight (초롱초롱)
     ctx.fillStyle = '#3a2800';
