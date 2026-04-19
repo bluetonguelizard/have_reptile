@@ -255,11 +255,14 @@ canvas {
   #ui-overlay > div:first-child {
     gap: 6px;
   }
-  #ui-overlay > div:last-child {
+  #action-btns {
+    width: 100%;
+  }
+  #action-btns > div {
     justify-content: space-between;
     gap: 4px;
   }
-  #ui-overlay > div:last-child .pixel-btn.small {
+  #action-btns > div .pixel-btn.small {
     flex: 1;
   }
 

@@ -55,19 +55,23 @@
         <div class="stat-bar"><div class="stat-fill hydration" id="bar-hydration" style="width:80%"></div></div>
       </div>
     </div>
-    <div style="display:flex;gap:6px;flex-shrink:0">
-      <button class="pixel-btn small" id="btn-handle" onclick="doHandle()"></button>
-      <button class="pixel-btn small blue" id="btn-feed" onclick="doFeed()"></button>
-      <button class="pixel-btn small" id="btn-water" onclick="doWater()" style="background:#4abfe8;color:#fff"></button>
-      <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
-      <button class="pixel-btn small" id="btn-sleep" onclick="doSleep()" style="display:none;background:#1e1550;color:#aaaaee"></button>
-      <button class="pixel-btn small" id="btn-sleep-guard" onclick="doSleepGuard()" style="display:none;background:#0d1a3a;color:#80c8ff"></button>
-      <button class="pixel-btn small" id="btn-farm" onclick="openFarm()" style="background:#3a7a3a;color:#c8f0c8"></button>
-      <button class="pixel-btn small" id="btn-companion" onclick="doFindCompanion()" style="display:none;background:#9a2a6a;color:#ffb0e0"></button>
-      <button class="pixel-btn small" id="btn-clean" onclick="doClean()" style="display:none;background:#7a4820;color:#f0e050"></button>
-      <button class="pixel-btn small" id="btn-substrate" onclick="doChangeSubstrate()" style="background:#8B5E3C;color:#f0e0c0"></button>
-      <button class="pixel-btn small" id="btn-wash-bowl" onclick="doWashBowl()" style="background:#4abfe8;color:#fff"></button>
-      <button class="pixel-btn small" id="btn-rehome" onclick="doRehome()" style="background:#5a3010;color:#d8a060"></button>
+    <div id="action-btns" style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="pixel-btn small" id="btn-handle" onclick="doHandle()"></button>
+        <button class="pixel-btn small blue" id="btn-feed" onclick="doFeed()"></button>
+        <button class="pixel-btn small" id="btn-water" onclick="doWater()" style="background:#4abfe8;color:#fff"></button>
+        <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
+        <button class="pixel-btn small" id="btn-sleep" onclick="doSleep()" style="display:none;background:#1e1550;color:#aaaaee"></button>
+        <button class="pixel-btn small" id="btn-sleep-guard" onclick="doSleepGuard()" style="display:none;background:#0d1a3a;color:#80c8ff"></button>
+        <button class="pixel-btn small" id="btn-farm" onclick="openFarm()" style="background:#3a7a3a;color:#c8f0c8"></button>
+        <button class="pixel-btn small" id="btn-companion" onclick="doFindCompanion()" style="display:none;background:#9a2a6a;color:#ffb0e0"></button>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="pixel-btn small" id="btn-clean" onclick="doClean()" style="display:none;background:#7a4820;color:#f0e050"></button>
+        <button class="pixel-btn small" id="btn-substrate" onclick="doChangeSubstrate()" style="background:#8B5E3C;color:#f0e0c0"></button>
+        <button class="pixel-btn small" id="btn-wash-bowl" onclick="doWashBowl()" style="background:#4abfe8;color:#fff"></button>
+        <button class="pixel-btn small" id="btn-rehome" onclick="doRehome()" style="background:#5a3010;color:#d8a060"></button>
+      </div>
     </div>
   </div>
 
