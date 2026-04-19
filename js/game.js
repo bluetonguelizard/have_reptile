@@ -23,6 +23,7 @@ let newLizardLocale = null;  // temp: btLocale for ajantics halmahera (locale se
 let outdoorState = null; // { dandelions: [{x,y,picked}], gathered: 0 }
 let hatchingEggId = null; // egg id being named after hatch
 let rehomeAnimState = null; // { phase, timer, lizardGs, name } — drives handover animation
+let sleepGuardGame = null;  // sleep mini-game state
 
 // Pixel art colors
 const C = {
@@ -97,6 +98,13 @@ function newGameState(type) {
     lonelyNotified: false,
     btGenetics: null,      // bluetongue mutation allele counts per locus
     btLocale: null,        // bluetongue subspecies locale (e.g. 'northern', 'eastern')
+    hasPoop: false,
+    hasUrine: false,
+    dailyQuestDay: -1,
+    questClean: false,
+    questSubstrate: false,
+    questWashBowl: false,
+    questAllDoneRewarded: false,
   };
 }
 
@@ -140,8 +148,13 @@ function saveGame() {
 }
 
 // ─── SLEEP HELPERS ───────────────────────────────────────────────────────────
-function isSleepyHour() { const h = new Date().getHours(); return h >= 0 && h < 6; }
-function isWakeHour()   { const h = new Date().getHours(); return h >= 6 && h < 24; }
+// diurnal: sleeps 00–06, nocturnal: sleeps 10–16
+function isSleepyHour(activity) {
+  const h = new Date().getHours();
+  if (activity === 'nocturnal') return h >= 10 && h < 16;
+  return h >= 0 && h < 6;
+}
+function isWakeHour(activity) { return !isSleepyHour(activity); }
 
 // ─── TIME ───────────────────────────────────────────────────────────────────
 function updateGameTime() {
@@ -159,6 +172,11 @@ function updateGameTime() {
     if (gs.hydration < 20) gs.happy = Math.max(0, gs.happy - daysElapsed * 3);
     gs.handleCountToday = 0; // reset daily handles
     gs.waterCountToday = 0; // reset daily water count
+    gs.questClean = false;
+    gs.questSubstrate = false;
+    gs.questWashBowl = false;
+    gs.questAllDoneRewarded = false;
+    gs.dailyQuestDay = gs.gameDaysPassed;
     if (!gs.isJuvenile && gs.gameDaysPassed >= 270) {
       gs.isJuvenile = true;
       gs.gender = Math.random() < 0.5 ? 'male' : 'female';
@@ -855,6 +873,7 @@ function drawBluetongueEggFace(cx, cy) {
 let bornAnim = { phase: 0, timer: 0 }; // phase: 0=egg, 1=cracking, 2=born, 3=done
 let lizardAnim = { frame: 0, timer: 0, threatening: true, threatTimer: 300 };
 let eatAnim = { active: false, timer: 0, type: null }; // type: 'feed' | 'water'
+let cleanAnim = { active: false, timer: 0 };
 let introTimer = 0;
 let introShown = false;
 
@@ -1069,6 +1088,8 @@ function drawRoom() {
   if (lizardType === 'crestie') drawCrestieEnclosure(W/2 - 180, H*0.15, W*0.75, H*0.48);
   else drawBluetongueEnclosure(W/2 - 200, H*0.15, W*0.8, H*0.48);
 
+  if (gs.bornAnim) drawPoopInEnclosure();
+  if (gs.bornAnim && cleanAnim.active) drawCleanAnim();
   if (gs.bornAnim && eatAnim.active) drawEatDrinkAnim();
 
   // Born animation
@@ -1817,7 +1838,7 @@ function drawUI() {
     sleepBtn.style.display = 'none';
   } else {
     actionBtns.forEach(id => { document.getElementById(id).style.display = ''; });
-    sleepBtn.style.display = isSleepyHour() ? '' : 'none';
+    sleepBtn.style.display = isSleepyHour(SPECIES_META[gs.species]?.activity) ? '' : 'none';
   }
   // Companion button — visible only when adult
   const companionBtn = document.getElementById('btn-companion');
@@ -1829,6 +1850,23 @@ function drawUI() {
   if (rehomeBtn) {
     rehomeBtn.style.display = gs.isSleeping ? 'none' : '';
   }
+  // Sleep guard button — show only when sleeping and not already playing
+  const sleepGuardBtn = document.getElementById('btn-sleep-guard');
+  if (sleepGuardBtn) {
+    sleepGuardBtn.style.display = (gs.isSleeping && !sleepGuardGame) ? '' : 'none';
+  }
+  // Clean button — show when there's poop or urine
+  const cleanBtn = document.getElementById('btn-clean');
+  if (cleanBtn) {
+    cleanBtn.textContent = t('clean_btn');
+    cleanBtn.style.display = (gs.hasPoop || gs.hasUrine) ? '' : 'none';
+  }
+  // Substrate / bowl buttons label update
+  const subBtn = document.getElementById('btn-substrate');
+  if (subBtn) subBtn.textContent = t('quest_substrate_btn');
+  const bowlBtn = document.getElementById('btn-wash-bowl');
+  if (bowlBtn) bowlBtn.textContent = t('quest_wash_bowl_btn');
+  updateQuestPanel();
 }
 
 function showMsg(text, duration=2500) {
@@ -1850,6 +1888,145 @@ function doHandle() {
   handlingSession.petting = false;
   handlingSession.petTimer = 0;
   showMsg(t('handle_start'), 3000);
+}
+
+function drawPoopPile(cx, cy) {
+  const s = 3;
+  // Stacked brown ovals getting smaller (classic poop silhouette)
+  ctx.fillStyle = '#5a3010';
+  ctx.beginPath(); ctx.ellipse(cx, cy, 4*s, 2*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx - s*0.5, cy - 3*s, 3*s, 2*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, cy - 6*s, 2*s, 1.5*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, cy - 8*s, s, s, 0, 0, Math.PI*2); ctx.fill();
+  // Highlight sheen
+  ctx.fillStyle = '#8b5020';
+  ctx.beginPath(); ctx.ellipse(cx - s, cy - 0.5*s, 1.5*s, s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx - s, cy - 3.5*s, s, 0.8*s, 0, 0, Math.PI*2); ctx.fill();
+}
+
+function drawPoopInEnclosure() {
+  if (!gs || (!gs.hasPoop && !gs.hasUrine)) return;
+  const W = canvas.width, H = canvas.height;
+  const isC = lizardType === 'crestie';
+  const ex = isC ? W/2 - 180 : W/2 - 200;
+  const ey = H * 0.15;
+  const ew = isC ? W * 0.75 : W * 0.8;
+  const eh = H * 0.48;
+
+  const poopX = Math.round(ex + ew * 0.65);
+  const poopY = Math.round(ey + eh - (isC ? 24 : 28));
+  const urineX = Math.round(ex + ew * 0.31);
+  const urineY = Math.round(ey + eh - (isC ? 30 : 34));
+
+  // Hide poop once hand has grabbed it (timer >= 700ms)
+  const grabbed = cleanAnim.active && cleanAnim.timer >= 700;
+
+  if (gs.hasUrine && !grabbed) {
+    ctx.fillStyle = 'rgba(210,200,60,0.52)';
+    ctx.beginPath(); ctx.ellipse(urineX, urineY, 15, 5, 0.2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(245,235,110,0.3)';
+    ctx.beginPath(); ctx.ellipse(urineX - 2, urineY - 1, 8, 3, 0, 0, Math.PI*2); ctx.fill();
+  }
+  if (gs.hasPoop && !grabbed) {
+    drawPoopPile(poopX, poopY);
+  }
+}
+
+function drawCleanAnim() {
+  const W = canvas.width, H = canvas.height;
+  const isC = lizardType === 'crestie';
+  const ex = isC ? W/2 - 180 : W/2 - 200;
+  const ey = H * 0.15;
+  const ew = isC ? W * 0.75 : W * 0.8;
+  const eh = H * 0.48;
+
+  const poopX = Math.round(ex + ew * 0.65);
+  const poopY = Math.round(ey + eh - (isC ? 24 : 28));
+  const topY = ey - 20;
+  const targetY = poopY - 20;
+  const tm = cleanAnim.timer;
+
+  let handY;
+  let showAttached = false;
+  if (tm < 700) {
+    handY = topY + (targetY - topY) * (tm / 700);
+  } else if (tm < 1100) {
+    handY = targetY;
+  } else {
+    handY = targetY - (targetY - topY + 30) * ((tm - 1100) / 900);
+    showAttached = true;
+  }
+
+  const alpha = tm < 300 ? tm / 300 : tm > 1700 ? Math.max(0, 1 - (tm - 1700) / 300) : 1;
+  ctx.globalAlpha = alpha;
+  drawPixelHand(poopX, handY);
+  if (showAttached) drawPoopPile(poopX, handY + 24);
+  ctx.globalAlpha = 1;
+}
+
+function doClean() {
+  if (!gs || !gs.bornAnim) return;
+  if (!gs.hasPoop && !gs.hasUrine) return;
+  if (cleanAnim.active) return;
+  cleanAnim = { active: true, timer: 0 };
+  gs.questClean = true;
+  showMsg(t('clean_ok'));
+}
+
+function doChangeSubstrate() {
+  if (!gs || !gs.bornAnim) return;
+  if (gs.questSubstrate) { showMsg(t('quest_done_today')); return; }
+  gs.questSubstrate = true;
+  gs.happy = Math.min(100, gs.happy + 5);
+  updateQuestPanel();
+  showMsg(t('quest_substrate_ok'));
+  checkQuestCompletion();
+  saveGame();
+}
+
+function doWashBowl() {
+  if (!gs || !gs.bornAnim) return;
+  if (gs.questWashBowl) { showMsg(t('quest_done_today')); return; }
+  gs.questWashBowl = true;
+  gs.hydration = Math.min(100, (gs.hydration || 0) + 5);
+  updateQuestPanel();
+  showMsg(t('quest_wash_bowl_ok'));
+  checkQuestCompletion();
+  saveGame();
+}
+
+function checkQuestCompletion() {
+  if (!gs || gs.questAllDoneRewarded) return;
+  const cleanDone = gs.questClean || (!gs.hasPoop && !gs.hasUrine && !cleanAnim.active);
+  if (cleanDone && gs.questSubstrate && gs.questWashBowl) {
+    gs.questAllDoneRewarded = true;
+    AUTH.saveAccountCoins(AUTH.getAccountCoins() + 2);
+    gs.bond = Math.min(100, gs.bond + 2);
+    showMsg(t('quest_all_done'), 3500);
+    saveGame();
+  }
+}
+
+function updateQuestPanel() {
+  const panel = document.getElementById('quest-panel');
+  if (!panel || !gs || !gs.bornAnim || scene !== SCENE.ROOM) { if (panel) panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const titleEl = document.getElementById('quest-panel-title');
+  if (titleEl) titleEl.textContent = t('quest_panel_title');
+  const cleanDone = gs.questClean;
+  const subDone = gs.questSubstrate;
+  const bowlDone = gs.questWashBowl;
+  document.getElementById('qitem-clean').className = 'quest-item' + (cleanDone ? ' done' : '');
+  document.getElementById('qitem-clean').textContent = (cleanDone ? '✓ ' : '○ ') + t('quest_clean');
+  document.getElementById('qitem-substrate').className = 'quest-item' + (subDone ? ' done' : '');
+  document.getElementById('qitem-substrate').textContent = (subDone ? '✓ ' : '○ ') + t('quest_substrate');
+  document.getElementById('qitem-bowl').className = 'quest-item' + (bowlDone ? ' done' : '');
+  document.getElementById('qitem-bowl').textContent = (bowlDone ? '✓ ' : '○ ') + t('quest_wash_bowl');
+  // Update button visibility
+  const subBtn = document.getElementById('btn-substrate');
+  if (subBtn) subBtn.style.display = subDone ? 'none' : '';
+  const bowlBtn = document.getElementById('btn-wash-bowl');
+  if (bowlBtn) bowlBtn.style.display = bowlDone ? 'none' : '';
 }
 
 function drawEatDrinkAnim() {
@@ -1956,6 +2133,8 @@ function doFeed() {
   gs.happy = Math.min(100, gs.happy + 10);
   if (lizardType === 'crestie') gs.weight = Math.min(50, gs.weight + 0.3);
   else gs.weight = Math.min(600, gs.weight + 4);
+  gs.hasPoop = true;
+  gs.hasUrine = true;
   eatAnim = { active: true, timer: 0, type: 'feed' };
   showMsg(feedMsg);
   saveGame();
@@ -1997,6 +2176,326 @@ function doSleep() {
   gs.isSleeping = true;
   showMsg(t('sleeping_msg'), 3000);
   saveGame();
+}
+
+// ─── SLEEP GUARD MINI-GAME ───────────────────────────────────────────────────
+function doSleepGuard() {
+  if (!gs || !gs.isSleeping || !gs.bornAnim) return;
+  if (sleepGuardGame) return;
+  sleepGuardGame = {
+    startTime: Date.now(),
+    duration: 30000,
+    bugs: [],
+    score: 0,
+    lives: 3,
+    spawnTimer: 1500,
+    spawnInterval: 2200,
+    bugIdCounter: 0,
+    particles: [],
+    screenFlash: 0,
+    result: null,
+    resultTimer: 0,
+    coinsEarned: 0,
+    bondEarned: 0,
+    _closeBtnBounds: null,
+  };
+}
+
+function _sgSpawnBug(W, H) {
+  const lizX = W / 2;
+  const lizY = lizardType === 'bluetongue' ? H * 0.55 : H * 0.52;
+  // 60% fly, 40% mite
+  const type = Math.random() < 0.6 ? 'fly' : 'mite';
+  let x, y;
+  if (type === 'mite') {
+    // Mites crawl from sides/bottom only
+    const side = Math.random() < 0.5 ? 1 : (Math.random() < 0.5 ? 3 : 2);
+    if (side === 1) { x = W + 12; y = 40 + Math.random() * (H * 0.65); }
+    else if (side === 2) { x = Math.random() * W; y = H * 0.83; }
+    else { x = -12; y = 40 + Math.random() * (H * 0.65); }
+  } else {
+    const side = Math.floor(Math.random() * 4);
+    if (side === 0) { x = Math.random() * W; y = -15; }
+    else if (side === 1) { x = W + 15; y = 30 + Math.random() * (H * 0.7); }
+    else if (side === 2) { x = Math.random() * W; y = H * 0.85; }
+    else { x = -15; y = 30 + Math.random() * (H * 0.7); }
+  }
+  const dx = lizX - x, dy = lizY - y;
+  const dist = Math.hypot(dx, dy) || 1;
+  // Mites are slower but harder to spot; flies faster with wobble
+  const speed = type === 'mite'
+    ? 0.022 + Math.random() * 0.015
+    : 0.035 + Math.random() * 0.025;
+  return {
+    id: sleepGuardGame.bugIdCounter++,
+    type,
+    x, y,
+    vx: (dx / dist) * speed,
+    vy: (dy / dist) * speed,
+    wobble: Math.random() * Math.PI * 2,
+    wobbleSpeed: type === 'mite' ? 0.001 + Math.random() * 0.001 : 0.003 + Math.random() * 0.002,
+    hit: false, hitTimer: 0,
+    reached: false, reachTimer: 0,
+    phase: Math.random() * Math.PI * 2,
+  };
+}
+
+function updateSleepGuard(dt) {
+  const sg = sleepGuardGame;
+  if (!sg) return;
+  if (sg.result) { sg.resultTimer += dt; return; }
+
+  const W = canvas.width, H = canvas.height;
+  const lizX = W / 2;
+  const lizY = lizardType === 'bluetongue' ? H * 0.55 : H * 0.52;
+  const elapsed = Date.now() - sg.startTime;
+
+  if (elapsed >= sg.duration || sg.lives <= 0) {
+    _endSleepGuard();
+    return;
+  }
+
+  // Spawn
+  sg.spawnTimer += dt;
+  if (sg.spawnTimer >= sg.spawnInterval) {
+    sg.spawnTimer = 0;
+    sg.bugs.push(_sgSpawnBug(W, H));
+    sg.spawnInterval = Math.max(1000, 2200 - elapsed * 0.025);
+  }
+
+  // Update bugs
+  for (const bug of sg.bugs) {
+    bug.phase += dt * 0.014;
+    if (bug.hit) { bug.hitTimer += dt; continue; }
+    if (bug.reached) { bug.reachTimer += dt; continue; }
+    bug.wobble += bug.wobbleSpeed * dt;
+    bug.x += bug.vx * dt + Math.sin(bug.wobble) * 0.25;
+    bug.y += bug.vy * dt + Math.cos(bug.wobble * 0.7) * 0.12;
+    if (Math.hypot(bug.x - lizX, bug.y - lizY) < 28) {
+      bug.reached = true;
+      sg.lives = Math.max(0, sg.lives - 1);
+      sg.screenFlash = 500;
+      for (let i = 0; i < 6; i++) {
+        sg.particles.push({ x: lizX, y: lizY,
+          vx: (Math.random() - 0.5) * 0.18,
+          vy: (Math.random() - 0.5) * 0.18,
+          alpha: 1, color: '#ff5050' });
+      }
+    }
+  }
+  sg.bugs = sg.bugs.filter(b => !(b.hit && b.hitTimer > 500) && !(b.reached && b.reachTimer > 600));
+
+  for (const p of sg.particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.alpha -= dt * 0.0025;
+  }
+  sg.particles = sg.particles.filter(p => p.alpha > 0);
+  if (sg.screenFlash > 0) sg.screenFlash -= dt;
+}
+
+function _endSleepGuard() {
+  const sg = sleepGuardGame;
+  let coins = 0, bond = 0;
+  if (sg.lives > 0) {
+    if (sg.score >= 12) { coins = 5; bond = 2; }
+    else if (sg.score >= 6) { coins = 3; bond = 1; }
+    else { coins = 1; }
+  } else {
+    if (sg.score >= 8) { coins = 2; }
+    else if (sg.score >= 3) { coins = 1; }
+  }
+  sg.coinsEarned = coins; sg.bondEarned = bond;
+  sg.result = 'done'; sg.resultTimer = 0;
+  if (coins > 0) AUTH.saveAccountCoins(AUTH.getAccountCoins() + coins);
+  if (bond > 0) { gs.bond = Math.min(100, gs.bond + bond); saveGame(); }
+}
+
+function _drawSgBug(x, y, phase, alpha) {
+  ctx.globalAlpha = alpha;
+  const flap = Math.sin(phase) > 0;
+  const wY = flap ? -7 : -5;
+  const wW = flap ? 9 : 7;
+  const wH = flap ? 3 : 4;
+  ctx.fillStyle = 'rgba(200, 230, 255, 0.55)';
+  ctx.beginPath(); ctx.ellipse(x - wW * 0.55, y + wY, wW * 0.5, wH, -0.35, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + wW * 0.55, y + wY, wW * 0.5, wH, 0.35, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2e1e0e';
+  ctx.beginPath(); ctx.ellipse(x, y, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1e0e00';
+  ctx.beginPath(); ctx.arc(x, y - 5, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff2020';
+  ctx.fillRect(x - 2, y - 6, 2, 2); ctx.fillRect(x + 1, y - 6, 2, 2);
+  ctx.strokeStyle = '#2e1e0e'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y - 1); ctx.lineTo(x - 8, y + 2);
+  ctx.moveTo(x - 4, y + 2); ctx.lineTo(x - 8, y + 5);
+  ctx.moveTo(x + 4, y - 1); ctx.lineTo(x + 8, y + 2);
+  ctx.moveTo(x + 4, y + 2); ctx.lineTo(x + 8, y + 5);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function _drawSgMite(x, y, phase, alpha) {
+  // Mite: tiny arachnid (8 legs, two-part body), reddish-brown
+  ctx.globalAlpha = alpha;
+  const legWiggle = Math.sin(phase * 1.8) * 1.5;
+
+  // 8 legs (4 per side), alternating with animation
+  ctx.strokeStyle = '#6b2a0a'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  // left legs
+  ctx.moveTo(x - 3, y - 1); ctx.lineTo(x - 7, y - 3 + legWiggle);
+  ctx.moveTo(x - 3, y + 1); ctx.lineTo(x - 8, y + legWiggle * 0.5);
+  ctx.moveTo(x - 3, y + 3); ctx.lineTo(x - 7, y + 3 - legWiggle);
+  ctx.moveTo(x - 2, y + 4); ctx.lineTo(x - 6, y + 6 + legWiggle * 0.3);
+  // right legs
+  ctx.moveTo(x + 3, y - 1); ctx.lineTo(x + 7, y - 3 - legWiggle);
+  ctx.moveTo(x + 3, y + 1); ctx.lineTo(x + 8, y - legWiggle * 0.5);
+  ctx.moveTo(x + 3, y + 3); ctx.lineTo(x + 7, y + 3 + legWiggle);
+  ctx.moveTo(x + 2, y + 4); ctx.lineTo(x + 6, y + 6 - legWiggle * 0.3);
+  ctx.stroke();
+
+  // Abdomen (rear, larger)
+  ctx.fillStyle = '#8b2010';
+  ctx.beginPath(); ctx.ellipse(x, y + 2, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+  // Cephalothorax (front, smaller)
+  ctx.fillStyle = '#5a1a08';
+  ctx.beginPath(); ctx.ellipse(x, y - 3, 3, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Tiny eyes (2 red dots)
+  ctx.fillStyle = '#ff6030';
+  ctx.fillRect(x - 2, y - 4, 1, 1); ctx.fillRect(x + 1, y - 4, 1, 1);
+
+  ctx.globalAlpha = 1;
+}
+
+function drawSleepGuardOverlay() {
+  const sg = sleepGuardGame;
+  if (!sg) return;
+  const W = canvas.width, H = canvas.height;
+  const lizX = W / 2;
+  const lizY = lizardType === 'bluetongue' ? H * 0.55 : H * 0.52;
+
+  // Dark overlay
+  ctx.fillStyle = 'rgba(4, 4, 18, 0.52)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Soft moonlight glow around lizard
+  const grd = ctx.createRadialGradient(lizX, lizY - 15, 8, lizX, lizY - 15, 90);
+  grd.addColorStop(0, 'rgba(140,190,255,0.1)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+
+  // Screen flash on bug reaching lizard
+  if (sg.screenFlash > 0) {
+    ctx.fillStyle = `rgba(255,40,40,${Math.min(0.38, (sg.screenFlash / 500) * 0.38)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Particles
+  for (const p of sg.particles) {
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Bugs
+  for (const bug of sg.bugs) {
+    let a = 1;
+    if (bug.hit) a = Math.max(0, 1 - bug.hitTimer / 500);
+    if (bug.reached) a = Math.max(0, 1 - bug.reachTimer / 600);
+    if (bug.type === 'mite') _drawSgMite(bug.x, bug.y, bug.phase, a);
+    else _drawSgBug(bug.x, bug.y, bug.phase, a);
+  }
+
+  if (!sg.result) {
+    const elapsed = Date.now() - sg.startTime;
+    const remaining = Math.max(0, sg.duration - elapsed);
+
+    // Timer bar (top center)
+    const barW = Math.min(W * 0.55, 200);
+    const barX = W / 2 - barW / 2;
+    const barY = 18;
+    ctx.fillStyle = '#0a0a22';
+    ctx.fillRect(barX - 1, barY - 1, barW + 2, 12);
+    const ratio = remaining / sg.duration;
+    ctx.fillStyle = ratio > 0.5 ? '#40e890' : ratio > 0.25 ? '#e8c040' : '#e84040';
+    ctx.fillRect(barX, barY, barW * ratio, 10);
+    ctx.strokeStyle = '#3a3a6a'; ctx.lineWidth = 2;
+    ctx.strokeRect(barX, barY, barW, 10);
+
+    ctx.fillStyle = '#d8eaff';
+    ctx.font = '7px "Press Start 2P", monospace';
+    const scoreTxt = t('sleep_guard_score').replace('{n}', sg.score);
+    ctx.fillText(scoreTxt, barX, barY + 26);
+
+    // Hearts (lives)
+    ctx.font = '11px sans-serif';
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < sg.lives ? '#ff4080' : '#2a2a4a';
+      ctx.fillText('♥', barX + barW - 14 - i * 17, barY + 26);
+    }
+
+    // Hint text (first 4 seconds)
+    const hintAlpha = Math.min(1, Math.max(0, (4000 - elapsed) / 1500));
+    if (hintAlpha > 0) {
+      ctx.globalAlpha = hintAlpha;
+      ctx.fillStyle = '#aaddff';
+      ctx.font = '6px "Press Start 2P", monospace';
+      const hint = t('sleep_guard_tap');
+      ctx.fillText(hint, W / 2 - ctx.measureText(hint).width / 2, H * 0.17);
+      ctx.globalAlpha = 1;
+    }
+  } else {
+    // Result panel
+    const panelW = Math.min(260, W * 0.78);
+    const panelH = 115;
+    const px = W / 2 - panelW / 2;
+    const py = H / 2 - panelH / 2 - 25;
+
+    ctx.fillStyle = '#080820';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = sg.lives > 0 ? '#4488ff' : '#884444';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    // Stars / result title
+    ctx.fillStyle = '#ffe060';
+    ctx.font = '10px "Press Start 2P", monospace';
+    const stars = sg.lives > 0 ? (sg.score >= 12 ? '★★★' : sg.score >= 6 ? '★★' : '★') : '✕';
+    ctx.fillText(stars, W / 2 - ctx.measureText(stars).width / 2, py + 22);
+
+    // Result lines
+    let raw;
+    if (sg.lives > 0) {
+      if (sg.score >= 12) raw = t('sleep_guard_result_great').replace('{n}', sg.score).replace('{c}', sg.coinsEarned).replace('{b}', sg.bondEarned);
+      else if (sg.score >= 6) raw = t('sleep_guard_result_good').replace('{n}', sg.score).replace('{c}', sg.coinsEarned);
+      else raw = t('sleep_guard_result_ok').replace('{c}', sg.coinsEarned);
+    } else {
+      raw = t('sleep_guard_result_fail').replace('{n}', sg.score);
+    }
+    const lines = raw.split('\n');
+    ctx.fillStyle = '#c8e0ff';
+    ctx.font = '6px "Press Start 2P", monospace';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, W / 2 - ctx.measureText(line).width / 2, py + 42 + i * 17);
+    });
+
+    // Close button
+    const btnW = 80, btnH = 22;
+    const btnX = W / 2 - btnW / 2;
+    const btnY = py + panelH - 28;
+    ctx.fillStyle = '#1a3060';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.strokeStyle = '#4488ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    ctx.fillStyle = '#e0f0ff';
+    ctx.font = '7px "Press Start 2P", monospace';
+    const closeTxt = t('sleep_guard_done_btn');
+    ctx.fillText(closeTxt, W / 2 - ctx.measureText(closeTxt).width / 2, btnY + 15);
+    sg._closeBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
+  }
 }
 
 function doFindCompanion() {
@@ -2357,6 +2856,11 @@ function gameLoop(ts) {
     drawOutdoor();
   } else if (scene === SCENE.ROOM) {
     drawRoom();
+    // Sleep guard mini-game
+    if (sleepGuardGame) {
+      if (!gs || !gs.isSleeping) { sleepGuardGame = null; }
+      else { updateSleepGuard(dt); drawSleepGuardOverlay(); }
+    }
     // Born animation progression
     if (!gs.bornAnim) {
       bornAnim.timer += dt;
@@ -2381,6 +2885,18 @@ function gameLoop(ts) {
     if (eatAnim.active) {
       eatAnim.timer += dt;
       if (eatAnim.timer > 2800) eatAnim = { active: false, timer: 0, type: null };
+    }
+    // Clean animation tick
+    if (cleanAnim.active) {
+      cleanAnim.timer += dt;
+      if (cleanAnim.timer >= 2000) {
+        gs.hasPoop = false;
+        gs.hasUrine = false;
+        cleanAnim = { active: false, timer: 0 };
+        updateQuestPanel();
+        checkQuestCompletion();
+        saveGame();
+      }
     }
 
     // Threat animation oscillation
@@ -2430,7 +2946,7 @@ function gameLoop(ts) {
     }
     if (gs.bornAnim && !gs.isLonely) gs.lonelyNotified = false;
     // Auto-wake in the morning
-    if (gs.isSleeping && isWakeHour()) {
+    if (gs.isSleeping && isWakeHour(SPECIES_META[gs.species]?.activity)) {
       gs.isSleeping = false;
       gs.bond = Math.min(100, gs.bond + 1);
       showMsg(t('wake_msg'), 3500);
@@ -2510,7 +3026,7 @@ window.addEventListener('load', () => {
       drawUI();
       const now = Date.now();
       // Show sleepy message periodically at night (every 60s)
-      if (gs.bornAnim && !gs.isSleeping && isSleepyHour()) {
+      if (gs.bornAnim && !gs.isSleeping && isSleepyHour(SPECIES_META[gs.species]?.activity)) {
         if (now - lastSleepyMsgTime > 60000) {
           lastSleepyMsgTime = now;
           showMsg(t('sleepy_msg'), 4000);
@@ -2555,6 +3071,35 @@ canvas_click = function(e) {
   const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
   const my = (e.clientY - rect.top) * (canvas.height / rect.height);
   const W = canvas.width, H = canvas.height;
+
+  // Sleep guard mini-game: intercept click
+  if (scene === SCENE.ROOM && sleepGuardGame) {
+    if (sleepGuardGame.result && sleepGuardGame._closeBtnBounds) {
+      const b = sleepGuardGame._closeBtnBounds;
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+        sleepGuardGame = null;
+      }
+    } else if (!sleepGuardGame.result) {
+      for (const bug of sleepGuardGame.bugs) {
+        if (bug.hit || bug.reached) continue;
+        const hitR = bug.type === 'mite' ? 14 : 20;
+        if (Math.hypot(mx - bug.x, my - bug.y) < hitR) {
+          bug.hit = true;
+          sleepGuardGame.score++;
+          for (let i = 0; i < 8; i++) {
+            sleepGuardGame.particles.push({
+              x: bug.x, y: bug.y,
+              vx: (Math.random() - 0.5) * 0.22,
+              vy: (Math.random() - 0.5) * 0.22,
+              alpha: 1, color: '#88ddff',
+            });
+          }
+          break;
+        }
+      }
+    }
+    return;
+  }
 
   // Handling session: intercept click
   if (scene === SCENE.ROOM && handlingSession.active) {
@@ -3226,6 +3771,8 @@ function doCricketFeed() {
   gs.happy = Math.min(100, gs.happy + 12);
   if (lizardType === 'crestie') gs.weight = Math.min(50, gs.weight + 0.5);
   else gs.weight = Math.min(600, gs.weight + 6);
+  gs.hasPoop = true;
+  gs.hasUrine = true;
   showMsg(t('cricket_feed_ok'));
   saveGame();
   closeFarm();
@@ -3302,6 +3849,8 @@ function doChicoryFeedLizard() {
   gs.hunger = Math.min(100, gs.hunger + 25);
   gs.happy = Math.min(100, gs.happy + 20);
   gs.hydration = Math.min(100, (gs.hydration || 0) + 15);
+  gs.hasPoop = true;
+  gs.hasUrine = true;
   showMsg(t('chicory_feed_lizard_ok'));
   saveGame();
   closeFarm();
@@ -3352,6 +3901,8 @@ function doCgestieFeedLizard() {
   gs.hunger = Math.min(100, gs.hunger + 45);
   gs.happy = Math.min(100, gs.happy + 12);
   gs.weight = Math.min(50, gs.weight + 0.5);
+  gs.hasPoop = true;
+  gs.hasUrine = true;
   showMsg(t('cgestie_food_feed_ok'));
   saveGame();
   closeFarm();
@@ -3393,6 +3944,8 @@ function doBtFeedLizard() {
   gs.hunger = Math.min(100, gs.hunger + 45);
   gs.happy = Math.min(100, gs.happy + 12);
   gs.weight = Math.min(600, gs.weight + 4);
+  gs.hasPoop = true;
+  gs.hasUrine = true;
   showMsg(t('bt_food_feed_ok'));
   saveGame();
   closeFarm();
@@ -3411,7 +3964,15 @@ function initOutdoorScene() {
   for (let i = 0; i < 8; i++) {
     const x = Math.round(W * 0.1 + seededRand(seed + i * 13) * W * 0.8);
     const y = Math.round(groundY + 52 + seededRand(seed + i * 17 + 100) * (H - groundY - 85));
-    dandelions.push({ x, y, picked: false, gone: false });
+    const spd = 28 + seededRand(seed + i * 31 + 5) * 38;
+    const dir = seededRand(seed + i * 43 + 11) * Math.PI * 2;
+    dandelions.push({
+      x, y,
+      baseX: x, baseY: y,
+      vx: Math.cos(dir) * spd,
+      vy: Math.sin(dir) * spd * 0.4,
+      picked: false, gone: false,
+    });
   }
   // Animated bugs (ladybugs)
   const bugs = [];
@@ -3682,6 +4243,18 @@ function drawOutdoor() {
       if (bug.y > H - 20)       { bug.y = H - 20;   bug.vy = -Math.abs(bug.vy); }
     }
 
+    // Move dandelions (bounce within ground area)
+    const minDY = groundY + 52, maxDY = H - 85;
+    for (const d of outdoorState.dandelions) {
+      if (d.picked || d.gone) continue;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      if (d.x < W * 0.06)  { d.x = W * 0.06;  d.vx =  Math.abs(d.vx); }
+      if (d.x > W * 0.94)  { d.x = W * 0.94;  d.vx = -Math.abs(d.vx); }
+      if (d.y < minDY)     { d.y = minDY;      d.vy =  Math.abs(d.vy); }
+      if (d.y > maxDY)     { d.y = maxDY;      d.vy = -Math.abs(d.vy); }
+    }
+
     // Spawn ambient seeds
     outdoorState.ambientSeedTimer += dt;
     if (outdoorState.ambientSeedTimer > 1.6 && outdoorState.seeds.filter(s => !s.burst).length < 9) {
@@ -3947,6 +4520,8 @@ function doDandelionFeedLizard() {
   gs.hunger = Math.min(100, gs.hunger + 20);
   gs.happy = Math.min(100, gs.happy + 15);
   gs.hydration = Math.min(100, (gs.hydration || 0) + 10);
+  gs.hasPoop = true;
+  gs.hasUrine = true;
   showMsg(t('dandelion_feed_ok'));
   saveGame();
   closeFarm();
@@ -4121,6 +4696,11 @@ function getBluetongueColors(morph, traits) {
   }
   return c;
 }
+
+const SPECIES_META = {
+  crestie:    { size: 'small',  activity: 'nocturnal' },
+  bluetongue: { size: 'medium', activity: 'diurnal'   },
+};
 
 const LIZARD_MORPHS = {
   crestie:    ['normal', 'lilly_white', 'cappuccino', 'sable', 'azantic', 'choco'],
@@ -4380,8 +4960,17 @@ function showDogramAdd() {
   document.getElementById('dogram-trait-view').style.display = 'none';
   document.getElementById('dogram-add-title').textContent = t('dogram_add_title');
   document.getElementById('dogram-add-subtitle').textContent = t('dogram_add_subtitle');
-  document.getElementById('btn-dogram-crestie').textContent = t('egg_orange');
-  document.getElementById('btn-dogram-bt').textContent = t('egg_blue');
+  ['crestie', 'bluetongue'].forEach(type => {
+    const id = type === 'crestie' ? 'btn-dogram-crestie' : 'btn-dogram-bt';
+    const meta = SPECIES_META[type];
+    const nameKey = type === 'crestie' ? 'egg_orange' : 'egg_blue';
+    document.getElementById(id).innerHTML =
+      `<div style="font-size:9px;margin-bottom:5px">${t(nameKey)}</div>` +
+      `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">` +
+      `<span class="species-badge size-badge">${t('size_' + meta.size)}</span>` +
+      `<span class="species-badge activity-badge">${t('activity_' + meta.activity)}</span>` +
+      `</div>`;
+  });
   document.getElementById('btn-dogram-back').textContent = t('dogram_back');
 }
 

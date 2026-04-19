@@ -61,8 +61,12 @@
       <button class="pixel-btn small" id="btn-water" onclick="doWater()" style="background:#4abfe8;color:#fff"></button>
       <button class="pixel-btn small" id="btn-status" onclick="doStatus()" style="background:#7a4ae8;color:#fff"></button>
       <button class="pixel-btn small" id="btn-sleep" onclick="doSleep()" style="display:none;background:#1e1550;color:#aaaaee"></button>
+      <button class="pixel-btn small" id="btn-sleep-guard" onclick="doSleepGuard()" style="display:none;background:#0d1a3a;color:#80c8ff"></button>
       <button class="pixel-btn small" id="btn-farm" onclick="openFarm()" style="background:#3a7a3a;color:#c8f0c8"></button>
       <button class="pixel-btn small" id="btn-companion" onclick="doFindCompanion()" style="display:none;background:#9a2a6a;color:#ffb0e0"></button>
+      <button class="pixel-btn small" id="btn-clean" onclick="doClean()" style="display:none;background:#7a4820;color:#f0e050"></button>
+      <button class="pixel-btn small" id="btn-substrate" onclick="doChangeSubstrate()" style="background:#8B5E3C;color:#f0e0c0"></button>
+      <button class="pixel-btn small" id="btn-wash-bowl" onclick="doWashBowl()" style="background:#4abfe8;color:#fff"></button>
       <button class="pixel-btn small" id="btn-rehome" onclick="doRehome()" style="background:#5a3010;color:#d8a060"></button>
     </div>
   </div>
@@ -71,6 +75,14 @@
   <div id="outdoor-overlay" style="display:none">
     <span id="outdoor-counter" style="font-size:9px;color:#c8e84a;white-space:nowrap"></span>
     <button class="pixel-btn small" id="btn-leave-outdoor" onclick="leaveOutdoor()" style="background:#7ab520;color:#fff"></button>
+  </div>
+
+  <!-- Daily quest panel -->
+  <div id="quest-panel" style="display:none">
+    <div class="quest-title" id="quest-panel-title"></div>
+    <div class="quest-item" id="qitem-clean">○ 사육장 치우기</div>
+    <div class="quest-item" id="qitem-substrate">○ 바닥재 갈기</div>
+    <div class="quest-item" id="qitem-bowl">○ 물그릇 씻기</div>
   </div>
 
   <!-- Message box -->
@@ -391,6 +403,7 @@ function updateGameLabels() {
   document.getElementById('btn-data-export').textContent = t('data_export');
   document.getElementById('btn-data-import').textContent = t('data_import');
   document.getElementById('btn-sleep').textContent = t('sleep_btn');
+  document.getElementById('btn-sleep-guard').textContent = t('sleep_guard_btn');
   document.getElementById('btn-farm').textContent = t('farm_btn');
   document.getElementById('btn-companion').textContent = t('companion_btn');
   document.getElementById('btn-rehome').textContent = t('rehome_btn');
