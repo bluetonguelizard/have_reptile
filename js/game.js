@@ -1568,6 +1568,21 @@ function drawBluetongue(x, y, anim, appearance) {
     ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
     ctx.fillStyle = '#000000';
     ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x+22*s, y+4*s, s, s);
+  } else if (morph === 'halmahera') {
+    // Bright amber eye with large highlight (초롱초롱)
+    ctx.fillStyle = '#3a2800';
+    ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+    ctx.fillStyle = '#1a0e00';
+    ctx.fillRect(x+20*s, y+4*s, 4*s, 4*s);
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(x+20*s, y+4*s, 3*s, 3*s);
+    ctx.fillStyle = C.black;
+    ctx.fillRect(x+20*s, y+4*s, 2*s, 2*s);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x+21*s, y+4*s, 2*s, s);   // wide top glint
+    ctx.fillRect(x+22*s, y+5*s, s,   s);   // second sparkle dot
   } else if (morph === 'albino') {
     // Pink/red eye for albino
     ctx.fillStyle = '#e08090';
@@ -1626,6 +1641,13 @@ function drawBluetongue(x, y, anim, appearance) {
       ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
       ctx.fillStyle = '#000000';
       ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);
+    } else if (morph === 'halmahera') {
+      ctx.fillStyle = '#3a2800';
+      ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
+      ctx.fillStyle = '#805030';
+      ctx.fillRect(x+20*s, y+5*s, 4*s, 2*s);
+      ctx.fillStyle = '#1a0e00';
+      ctx.fillRect(x+20*s, y+5*s, 4*s, s);
     } else if (morph === 'albino') {
       ctx.fillStyle = '#e08090';
       ctx.fillRect(x+19*s, y+3*s, 5*s, 5*s);
@@ -2556,6 +2578,7 @@ canvas_click = function(e) {
       if (dist < 22) {
         d.picked = true;
         outdoorState.gathered++;
+        burstSeeds(d.x, fy);
         updateOutdoorCounter();
         // Stock full → auto-leave
         if ((gs.dandelionStock || 0) + outdoorState.gathered >= 10) {
@@ -3402,6 +3425,8 @@ function initOutdoorScene() {
   outdoorState = {
     dandelions,
     bugs,
+    seeds: [],
+    ambientSeedTimer: 0,
     gathered: 0,
     startTime: Date.now(),
     duration: 22,
@@ -3426,58 +3451,170 @@ function updateOutdoorCounter() {
 
 function drawDandelionFlower(x, y, picked, wiltLevel) {
   wiltLevel = wiltLevel || 0;
-  const stemH = 32;
-  const fy = y - stemH - 9; // flower center y
+  const stemH = 38;
+  const fy = y - stemH - 12;
 
   if (picked) {
-    ctx.fillStyle = '#8a9870';
-    ctx.fillRect(x - 1, y - stemH, 2, stemH);
-    ctx.fillStyle = '#b0a080';
+    ctx.strokeStyle = '#7a9060';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y - stemH, 3, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + 4, y - stemH * 0.55, x, y - stemH);
+    ctx.stroke();
+    ctx.fillStyle = '#9a8050';
+    ctx.beginPath(); ctx.arc(x, y - stemH, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c4aa70';
+    ctx.beginPath(); ctx.arc(x - 0.5, y - stemH - 0.5, 1.8, 0, Math.PI * 2); ctx.fill();
     return;
   }
 
   ctx.save();
-  if (wiltLevel > 0) ctx.globalAlpha = 1 - wiltLevel * 0.5;
+  if (wiltLevel > 0) ctx.globalAlpha = 1 - wiltLevel * 0.4;
 
-  // Stem
-  ctx.fillStyle = wiltLevel > 0 ? '#7a8a20' : '#3a7a1a';
-  ctx.fillRect(x - 1, y - stemH, 2, stemH);
+  // Stem (slight curve)
+  ctx.strokeStyle = wiltLevel > 0 ? '#7a8820' : '#2e7016';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + 5 * (1 - wiltLevel), y - stemH * 0.52, x, y - stemH);
+  ctx.stroke();
 
-  // Leaves
-  ctx.fillStyle = wiltLevel > 0 ? '#8aaa28' : '#4a9a2a';
-  ctx.save(); ctx.translate(x - 5, y - 14); ctx.rotate(-0.5 + wiltLevel * 0.4);
-  ctx.beginPath(); ctx.ellipse(0, 0, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Leaves (larger, more dandelion-like)
+  const leafColor = wiltLevel > 0 ? '#8aaa26' : '#3a9020';
+  ctx.fillStyle = leafColor;
+  ctx.save(); ctx.translate(x - 8, y - 17); ctx.rotate(-0.7 + wiltLevel * 0.55);
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 4.5, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  ctx.save(); ctx.translate(x + 5, y - 9); ctx.rotate(0.5 - wiltLevel * 0.4);
-  ctx.beginPath(); ctx.ellipse(0, 0, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(x + 8, y - 11); ctx.rotate(0.7 - wiltLevel * 0.55);
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Leaf tips (slightly darker)
+  ctx.fillStyle = wiltLevel > 0 ? '#6a9020' : '#2a7010';
+  ctx.save(); ctx.translate(x - 18, y - 19); ctx.rotate(-0.7 + wiltLevel * 0.55);
+  ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(x + 18, y - 13); ctx.rotate(0.7 - wiltLevel * 0.55);
+  ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // Petals (shrink when wilted)
-  const ps = 1 - wiltLevel * 0.45; // petal scale
-  const pr = 12 * (1 - wiltLevel * 0.3); // petal orbit radius
-  ctx.fillStyle = wiltLevel > 0
-    ? `rgb(${Math.round(200 + 28 * wiltLevel)},${Math.round(160 - 60 * wiltLevel)},20)`
-    : '#f8d030';
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const petalX = x + Math.cos(angle) * pr;
-    const petalY = fy + Math.sin(angle) * pr;
-    ctx.save(); ctx.translate(petalX, petalY); ctx.rotate(angle);
-    ctx.beginPath(); ctx.ellipse(0, 0, 6 * ps, 3 * ps, 0, 0, Math.PI * 2); ctx.fill();
+  // Petals — two rings, 24 petals total, narrow and dense like a real dandelion
+  const ps = 1 - wiltLevel * 0.32;
+  const pr = 12 * (1 - wiltLevel * 0.22);
+  const numP = 24;
+  const petalR = Math.round(248 - wiltLevel * 38);
+  const petalG = Math.round(215 - wiltLevel * 80);
+
+  // Outer ring (slightly dimmer)
+  ctx.fillStyle = `rgb(${Math.round(petalR * 0.82)},${Math.round(petalG * 0.82)},10)`;
+  for (let i = 0; i < numP; i++) {
+    const angle = (i / numP) * Math.PI * 2 + 0.065;
+    ctx.save();
+    ctx.translate(x + Math.cos(angle) * pr, fy + Math.sin(angle) * pr);
+    ctx.rotate(angle);
+    ctx.beginPath(); ctx.ellipse(0, 0, 10 * ps, 2.2 * ps, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // Inner ring (brighter)
+  ctx.fillStyle = `rgb(${petalR},${petalG},12)`;
+  for (let i = 0; i < numP; i++) {
+    const angle = (i / numP) * Math.PI * 2;
+    ctx.save();
+    ctx.translate(x + Math.cos(angle) * pr, fy + Math.sin(angle) * pr);
+    ctx.rotate(angle);
+    ctx.beginPath(); ctx.ellipse(0, 0, 10 * ps, 2.2 * ps, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
-  // Center
-  const cr = 7 * (1 - wiltLevel * 0.3);
-  ctx.fillStyle = wiltLevel > 0 ? '#a05010' : '#e87820';
+  // Center disc
+  const cr = 7 * (1 - wiltLevel * 0.22);
+  ctx.fillStyle = wiltLevel > 0 ? '#9a5010' : '#c06808';
   ctx.beginPath(); ctx.arc(x, fy, cr, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = wiltLevel > 0 ? '#c07030' : '#f8b040';
-  ctx.beginPath(); ctx.arc(x - 1, fy - 1, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = wiltLevel > 0 ? '#ba7028' : '#e89010';
+  ctx.beginPath(); ctx.arc(x - 0.5, fy - 0.5, cr * 0.62, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,248,180,0.55)';
+  ctx.beginPath(); ctx.arc(x - 1.2, fy - 1.5, cr * 0.26, 0, Math.PI * 2); ctx.fill();
 
   ctx.restore();
+}
+
+function roundRect(c, x, y, w, h, r) {
+  if (w <= 0) return;
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.lineTo(x + w - r, y);
+  c.arcTo(x + w, y, x + w, y + r, r);
+  c.lineTo(x + w, y + h - r);
+  c.arcTo(x + w, y + h, x + w - r, y + h, r);
+  c.lineTo(x + r, y + h);
+  c.arcTo(x, y + h, x, y + h - r, r);
+  c.lineTo(x, y + r);
+  c.arcTo(x, y, x + r, y, r);
+  c.closePath();
+}
+
+function drawFloatingSeed(sx, sy, angle, alpha, scale) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.translate(sx, sy);
+  ctx.rotate(angle);
+
+  const stemLen = 13 * scale;
+  const bodyH = 4 * scale;
+  const bristleLen = 8 * scale;
+  const numBristles = 13;
+
+  // Seed body
+  ctx.fillStyle = '#c8a030';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 1.6 * scale, bodyH * 0.52, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Stem
+  ctx.strokeStyle = 'rgba(210,185,90,0.88)';
+  ctx.lineWidth = 0.8 * scale;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, -bodyH * 0.52);
+  ctx.lineTo(0, -bodyH * 0.52 - stemLen);
+  ctx.stroke();
+
+  // Fluffy pappus bristles
+  const tipY = -bodyH * 0.52 - stemLen;
+  ctx.strokeStyle = 'rgba(255,255,235,0.88)';
+  ctx.lineWidth = 0.55 * scale;
+  for (let i = 0; i < numBristles; i++) {
+    const a = (i / numBristles) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, tipY);
+    ctx.lineTo(Math.cos(a) * bristleLen * 0.72, tipY + Math.sin(a) * bristleLen * 0.58);
+    ctx.stroke();
+  }
+  // Center dot
+  ctx.fillStyle = 'rgba(255,252,210,0.92)';
+  ctx.beginPath(); ctx.arc(0, tipY, 1.3 * scale, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+function burstSeeds(fx, fy) {
+  if (!outdoorState) return;
+  for (let i = 0; i < 9; i++) {
+    const angle = (i / 9) * Math.PI * 2 + (Math.random() - 0.5) * 1.0;
+    const speed = 45 + Math.random() * 65;
+    outdoorState.seeds.push({
+      x: fx, y: fy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 35,
+      angle: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 3.5,
+      life: 0,
+      maxLife: 2.2 + Math.random() * 1.8,
+      scale: 0.45 + Math.random() * 0.38,
+      burst: true,
+    });
+  }
 }
 
 function drawBug(x, y) {
@@ -3514,94 +3651,195 @@ function drawBug(x, y) {
 function drawOutdoor() {
   const W = canvas.width, H = canvas.height;
   const skyH = H * 0.52;
+  const now = Date.now();
+  const tSec = now / 1000;
 
   // === OUTDOOR GAME LOGIC ===
   let elapsed = 0, timeLeft = 999;
   if (outdoorState) {
-    const now = Date.now();
     elapsed = (now - outdoorState.startTime) / 1000;
     timeLeft = Math.max(0, outdoorState.duration - elapsed);
 
-    // Auto-leave when time's up
     if (timeLeft <= 0) { leaveOutdoor(); return; }
 
-    // Wilt warning at 8s remaining
     if (timeLeft <= 8 && !outdoorState.wiltWarned) {
       outdoorState.wiltWarned = true;
       showMsg(t('dandelion_wilt_warning'));
     }
 
-    // Update bug positions
-    const dtBug = Math.min((now - outdoorState.lastUpdateTime) / 1000, 0.05);
+    // Update bugs + seeds with shared dt
+    const dt = Math.min((now - outdoorState.lastUpdateTime) / 1000, 0.05);
     outdoorState.lastUpdateTime = now;
     const groundY = H * 0.52;
+
     for (const bug of outdoorState.bugs) {
-      bug.x += bug.vx * dtBug;
-      bug.y += bug.vy * dtBug;
-      if (bug.x < 15)       { bug.x = 15;       bug.vx =  Math.abs(bug.vx); }
-      if (bug.x > W - 15)   { bug.x = W - 15;   bug.vx = -Math.abs(bug.vx); }
+      bug.x += bug.vx * dt;
+      bug.y += bug.vy * dt;
+      if (bug.x < 15)           { bug.x = 15;       bug.vx =  Math.abs(bug.vx); }
+      if (bug.x > W - 15)       { bug.x = W - 15;   bug.vx = -Math.abs(bug.vx); }
       if (bug.y < groundY + 12) { bug.y = groundY + 12; bug.vy =  Math.abs(bug.vy); }
-      if (bug.y > H - 20)   { bug.y = H - 20;   bug.vy = -Math.abs(bug.vy); }
+      if (bug.y > H - 20)       { bug.y = H - 20;   bug.vy = -Math.abs(bug.vy); }
+    }
+
+    // Spawn ambient seeds
+    outdoorState.ambientSeedTimer += dt;
+    if (outdoorState.ambientSeedTimer > 1.6 && outdoorState.seeds.filter(s => !s.burst).length < 9) {
+      outdoorState.ambientSeedTimer = 0;
+      outdoorState.seeds.push({
+        x: Math.random() * W,
+        y: -10,
+        vx: (Math.random() - 0.35) * 22,
+        vy: 18 + Math.random() * 16,
+        angle: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 1.8,
+        life: 0,
+        maxLife: 7 + Math.random() * 6,
+        scale: 0.55 + Math.random() * 0.45,
+        burst: false,
+      });
+    }
+
+    // Update seeds
+    for (let i = outdoorState.seeds.length - 1; i >= 0; i--) {
+      const s = outdoorState.seeds[i];
+      s.vy += (s.burst ? 38 : 6) * dt;    // gravity (burst seeds fall faster)
+      s.vx *= s.burst ? 0.97 : 0.995;     // gentle drag
+      s.x += s.vx * dt + Math.sin(s.life * 2.0 + i) * 14 * dt;
+      s.y += s.vy * dt;
+      s.angle += s.rotSpeed * dt;
+      s.life += dt;
+      if (s.life > s.maxLife || s.y > H + 30 || s.x < -30 || s.x > W + 30) {
+        outdoorState.seeds.splice(i, 1);
+      }
     }
   }
 
-  // Sky
+  // ── Sky ──
   const skyGrad = ctx.createLinearGradient(0, 0, 0, skyH);
-  skyGrad.addColorStop(0, '#3a80c8');
-  skyGrad.addColorStop(1, '#90c8f0');
+  skyGrad.addColorStop(0,   '#1e6bb8');
+  skyGrad.addColorStop(0.45,'#4a9cd4');
+  skyGrad.addColorStop(1,   '#aaddee');
   ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, W, skyH);
 
-  // Sun
-  ctx.fillStyle = '#f8e840';
-  ctx.beginPath(); ctx.arc(W * 0.82, H * 0.1, 24, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#fffaaa';
-  ctx.beginPath(); ctx.arc(W * 0.82, H * 0.1, 15, 0, Math.PI * 2); ctx.fill();
+  // ── Sun ──
+  const sunX = W * 0.82, sunY = H * 0.1;
+  // Glow
+  ctx.fillStyle = 'rgba(255,240,100,0.12)';
+  ctx.beginPath(); ctx.arc(sunX, sunY, 40, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,240,100,0.18)';
+  ctx.beginPath(); ctx.arc(sunX, sunY, 30, 0, Math.PI * 2); ctx.fill();
+  // Body
+  ctx.fillStyle = '#ffe838';
+  ctx.beginPath(); ctx.arc(sunX, sunY, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff8c0';
+  ctx.beginPath(); ctx.arc(sunX, sunY, 12, 0, Math.PI * 2); ctx.fill();
+  // Rays
+  ctx.strokeStyle = 'rgba(255,238,80,0.55)';
+  ctx.lineWidth = 2; ctx.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + tSec * 0.18;
+    ctx.beginPath();
+    ctx.moveTo(sunX + Math.cos(a) * 24, sunY + Math.sin(a) * 24);
+    ctx.lineTo(sunX + Math.cos(a) * 36, sunY + Math.sin(a) * 36);
+    ctx.stroke();
+  }
 
-  // Clouds
+  // ── Clouds (gently drifting) ──
   function cloud(cx, cy, sc) {
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    [[0,0,18],[22,5,13],[-18,6,11],[10,-9,11]].forEach(([ox,oy,r]) => {
+    const puffs = [[0,0,19],[24,5,14],[-20,6,12],[12,-10,12],[38,-1,10],[-6,-11,10]];
+    // Shadow
+    ctx.fillStyle = 'rgba(170,200,220,0.35)';
+    puffs.forEach(([ox,oy,r]) => {
+      ctx.beginPath(); ctx.arc(cx+ox*sc+2, cy+oy*sc+4, r*sc, 0, Math.PI*2); ctx.fill();
+    });
+    // Body
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    puffs.forEach(([ox,oy,r]) => {
       ctx.beginPath(); ctx.arc(cx+ox*sc, cy+oy*sc, r*sc, 0, Math.PI*2); ctx.fill();
     });
-    ctx.fillRect(cx - 28*sc, cy, 56*sc, 16*sc);
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath(); ctx.arc(cx - 8*sc, cy - 8*sc, 10*sc, 0, Math.PI*2); ctx.fill();
   }
-  cloud(W*0.18, H*0.1, 1);
-  cloud(W*0.55, H*0.07, 0.75);
+  const cdx1 = (tSec * 8) % (W * 1.4) - W * 0.2;
+  const cdx2 = (tSec * 5 + W * 0.55) % (W * 1.4) - W * 0.2;
+  cloud(cdx1, H * 0.09, 1.0);
+  cloud(cdx2, H * 0.06, 0.72);
 
-  // Background hills
-  ctx.fillStyle = '#4a8a38';
+  // ── Background hills ──
+  ctx.fillStyle = '#3a7e2a';
   ctx.beginPath();
   ctx.moveTo(0, skyH);
-  ctx.quadraticCurveTo(W*0.25, skyH - H*0.14, W*0.5, skyH - H*0.05);
-  ctx.quadraticCurveTo(W*0.75, skyH + H*0.04, W, skyH - H*0.09);
+  ctx.bezierCurveTo(W*0.12, skyH - H*0.18, W*0.28, skyH - H*0.08, W*0.5, skyH - H*0.06);
+  ctx.bezierCurveTo(W*0.68, skyH - H*0.04, W*0.82, skyH - H*0.13, W, skyH - H*0.1);
+  ctx.lineTo(W, skyH); ctx.closePath(); ctx.fill();
+  // Hill highlight
+  ctx.fillStyle = '#4a9838';
+  ctx.beginPath();
+  ctx.moveTo(0, skyH);
+  ctx.bezierCurveTo(W*0.12, skyH - H*0.13, W*0.28, skyH - H*0.05, W*0.5, skyH - H*0.04);
+  ctx.bezierCurveTo(W*0.68, skyH - H*0.02, W*0.82, skyH - H*0.09, W, skyH - H*0.07);
   ctx.lineTo(W, skyH); ctx.closePath(); ctx.fill();
 
-  // Ground
+  // ── Ground ──
   const grassGrad = ctx.createLinearGradient(0, skyH, 0, H);
-  grassGrad.addColorStop(0, '#68b848'); grassGrad.addColorStop(1, '#3a8828');
+  grassGrad.addColorStop(0,   '#72cc50');
+  grassGrad.addColorStop(0.3, '#5ab840');
+  grassGrad.addColorStop(1,   '#3a9028');
   ctx.fillStyle = grassGrad; ctx.fillRect(0, skyH, W, H - skyH);
 
-  // Grass lines texture
-  ctx.strokeStyle = 'rgba(0,60,0,0.1)'; ctx.lineWidth = 1;
-  for (let gx = 0; gx < W; gx += 9) {
+  // Subtle ground stripes
+  ctx.strokeStyle = 'rgba(0,50,0,0.07)'; ctx.lineWidth = 1;
+  for (let gx = 0; gx < W; gx += 10) {
     ctx.beginPath(); ctx.moveTo(gx, skyH); ctx.lineTo(gx, H); ctx.stroke();
   }
 
-  // Left tree
-  px(W*0.07 - 7, skyH - H*0.01, 14, H*0.14, '#6b3e1c');
-  ctx.fillStyle = '#2a6820';
-  ctx.beginPath(); ctx.arc(W*0.07, skyH - H*0.09, W*0.065, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#3a8830';
-  ctx.beginPath(); ctx.arc(W*0.07, skyH - H*0.17, W*0.048, 0, Math.PI*2); ctx.fill();
+  // Grass blades at ground edge
+  ctx.strokeStyle = '#3aaa1a'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+  for (let gx = 4; gx < W; gx += 7) {
+    const h = 6 + Math.sin(gx * 0.31 + tSec * 1.2) * 3;
+    const lean = Math.sin(gx * 0.17 + tSec * 0.8) * 3;
+    ctx.beginPath();
+    ctx.moveTo(gx, skyH);
+    ctx.quadraticCurveTo(gx + lean, skyH - h * 0.5, gx + lean * 1.4, skyH - h);
+    ctx.stroke();
+  }
 
-  // Right bush/tree
-  px(W*0.91 - 5, skyH - H*0.01, 10, H*0.1, '#6b3e1c');
-  ctx.fillStyle = '#2a6820';
-  ctx.beginPath(); ctx.arc(W*0.91, skyH - H*0.08, W*0.055, 0, Math.PI*2); ctx.fill();
+  // ── Left tree ──
+  px(W*0.07 - 7, skyH - H*0.01, 14, H*0.14, '#5a3010');
+  ctx.fillStyle = '#1e5818';
+  ctx.beginPath(); ctx.arc(W*0.07, skyH - H*0.1, W*0.068, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#2a7222';
+  ctx.beginPath(); ctx.arc(W*0.065, skyH - H*0.17, W*0.05, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#38903a';  // highlight
+  ctx.beginPath(); ctx.arc(W*0.06, skyH - H*0.2, W*0.026, 0, Math.PI*2); ctx.fill();
 
-  // Dandelions (with wilt effect)
+  // ── Right bush/tree ──
+  px(W*0.91 - 5, skyH - H*0.01, 10, H*0.1, '#5a3010');
+  ctx.fillStyle = '#1e5818';
+  ctx.beginPath(); ctx.arc(W*0.91, skyH - H*0.09, W*0.058, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#2a7222';
+  ctx.beginPath(); ctx.arc(W*0.908, skyH - H*0.14, W*0.038, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#38903a';
+  ctx.beginPath(); ctx.arc(W*0.905, skyH - H*0.17, W*0.02, 0, Math.PI*2); ctx.fill();
+
+  // ── Small background flowers (decorative, non-pickable) ──
+  const bgFlowers = [[W*0.38, skyH+14],[W*0.53, skyH+10],[W*0.65, skyH+18],[W*0.28, skyH+20]];
+  for (const [fx, fy] of bgFlowers) {
+    ctx.strokeStyle = '#2a8010'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx, fy - 10); ctx.stroke();
+    ctx.fillStyle = '#ff88aa';
+    for (let i = 0; i < 5; i++) {
+      const a = (i/5)*Math.PI*2;
+      ctx.beginPath(); ctx.arc(fx + Math.cos(a)*4, fy - 10 + Math.sin(a)*4, 2.5, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = '#ffe050';
+    ctx.beginPath(); ctx.arc(fx, fy - 10, 2, 0, Math.PI*2); ctx.fill();
+  }
+
+  // ── Dandelions ──
   if (outdoorState) {
-    const wiltStart = outdoorState.duration - 8;  // wilt begins at 8s remaining
+    const wiltStart = outdoorState.duration - 8;
     for (const d of outdoorState.dandelions) {
       if (d.gone) continue;
       let wiltLevel = 0;
@@ -3610,22 +3848,39 @@ function drawOutdoor() {
     }
   }
 
-  // Bugs
+  // ── Floating seeds ──
+  if (outdoorState) {
+    for (const s of outdoorState.seeds) {
+      const lr = s.life / s.maxLife;
+      let alpha = lr < 0.12 ? lr / 0.12 : lr > 0.78 ? (1 - lr) / 0.22 : 1;
+      alpha = Math.max(0, Math.min(1, alpha)) * 0.88;
+      drawFloatingSeed(s.x, s.y, s.angle, alpha, s.scale);
+    }
+  }
+
+  // ── Bugs ──
   if (outdoorState) {
     for (const bug of outdoorState.bugs) drawBug(bug.x, bug.y);
   }
 
-  // Timer bar
+  // ── Timer bar ──
   if (outdoorState) {
     const timerFrac = Math.max(0, timeLeft / outdoorState.duration);
-    const barW = W * 0.62;
-    const barX = W * 0.19;
-    const barY = 10;
-    const barH = 10;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
-    ctx.fillStyle = timeLeft > 10 ? '#4adb4a' : timeLeft > 5 ? '#f8c040' : '#f84040';
-    ctx.fillRect(barX, barY, barW * timerFrac, barH);
+    const barW = W * 0.62, barX = W * 0.19, barY = 10, barH = 10;
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(ctx, barX - 2, barY - 2, barW + 4, barH + 4, 4);
+    ctx.fill();
+    // Fill
+    const barColor = timeLeft > 10 ? '#44dd44' : timeLeft > 5 ? '#f8c040' : '#f84040';
+    ctx.fillStyle = barColor;
+    roundRect(ctx, barX, barY, Math.max(0, barW * timerFrac), barH, 2);
+    ctx.fill();
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    roundRect(ctx, barX, barY, Math.max(0, barW * timerFrac), barH * 0.4, 2);
+    ctx.fill();
+    // Time text
     ctx.fillStyle = '#fff';
     ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
     ctx.textAlign = 'center';
@@ -3633,10 +3888,11 @@ function drawOutdoor() {
     ctx.textAlign = 'left';
   }
 
-  // Tap hint (if dandelions remain)
+  // ── Tap hint ──
   if (outdoorState && outdoorState.dandelions.some(d => !d.picked && !d.gone)) {
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(W / 2 - 110, H - 28, 220, 22);
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    roundRect(ctx, W/2 - 112, H - 29, 224, 23, 5);
+    ctx.fill();
     ctx.fillStyle = '#c8e84a';
     ctx.font = "7px 'Press Start 2P', Galmuri11, monospace";
     ctx.textAlign = 'center';
@@ -3644,7 +3900,7 @@ function drawOutdoor() {
     ctx.textAlign = 'left';
   }
 
-  // Penalty flash
+  // ── Penalty flash ──
   if (outdoorState && Date.now() < outdoorState.penaltyEndTime) {
     ctx.fillStyle = 'rgba(255,30,0,0.28)';
     ctx.fillRect(0, 0, W, H);
