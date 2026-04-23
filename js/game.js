@@ -2113,8 +2113,9 @@ function doFeed() {
   }
   const hasPellet = (gs.pelletCount || 0) >= 1;
   const hasChicory = lizardType !== 'crestie' && (gs.chicoryStock || 0) >= 1;
+  const hasDandelion = lizardType !== 'crestie' && (gs.dandelionStock || 0) >= 1;
   const hasCricket = (gs.cricketCount || 0) >= 5;
-  if (!hasPellet && !hasChicory && !hasCricket) {
+  if (!hasPellet && !hasChicory && !hasDandelion && !hasCricket) {
     showMsg(t('feed_no_food')); return;
   }
   let feedMsg;
@@ -2124,6 +2125,9 @@ function doFeed() {
   } else if (hasChicory) {
     gs.chicoryStock -= 1;
     feedMsg = t('feed_ok_chicory');
+  } else if (hasDandelion) {
+    gs.dandelionStock -= 1;
+    feedMsg = t('feed_ok_dandelion');
   } else {
     gs.cricketCount -= 5;
     feedMsg = t('feed_ok_cricket');
